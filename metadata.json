@@ -1,0 +1,6 @@
+{
+  "name": "Ebook Store",
+  "description": "A premium digital bookstore with secure Razorpay checkout, instant PDF delivery, reading library, and comprehensive admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
