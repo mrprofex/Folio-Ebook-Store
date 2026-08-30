@@ -13,6 +13,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, confirmPassword?: string) => Promise<void>;
   googleLogin: (idToken: string) => Promise<void>;
+  adminLogin: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   openAuthModal: (mode?: 'login' | 'register') => void;
@@ -86,6 +87,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthModalOpen(false);
   };
 
+  const adminLogin = async (email: string, password: string) => {
+    const data = await apiRequest<AuthResponse>('/api/auth/admin-login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+
+    setStoredToken(data.token);
+    setToken(data.token);
+    setUser(data.user);
+    setIsAuthModalOpen(false);
+  };
+
   const logout = () => {
     removeStoredToken();
     setToken(null);
@@ -120,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         googleLogin,
+        adminLogin,
         logout,
         refreshUser,
         openAuthModal,

@@ -65,6 +65,8 @@ router.post('/google', async (req, res) => {
     }
 
     const email = payload.email.toLowerCase().trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+    const isAdmin = Boolean(adminEmail) && email === adminEmail;
     const name = (payload.name || email.split('@')[0]).trim();
 
     let user = await db.findUserByEmail(email);
@@ -76,9 +78,12 @@ router.post('/google', async (req, res) => {
         name,
         email,
         passwordHash: randomHash,
-        role: 'USER'
+        role: isAdmin ? 'ADMIN' : 'USER'
       });
       user = created as User & { passwordHash: string };
+    } else if (isAdmin && user.role !== 'ADMIN') {
+      // Promote to admin if this Google account is the configured admin email
+      await db.updateUser(user.id, { role: 'ADMIN' });
     }
 
     await db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
@@ -93,6 +98,52 @@ router.post('/google', async (req, res) => {
   } catch (err: any) {
     console.error('Google login error:', err);
     return res.status(401).json({ error: 'GOOGLE_AUTH_FAILED', message: 'Google sign-in failed. Please try again.' });
+  }
+});
+
+// Admin login — validates against ADMIN_EMAIL / ADMIN_PASSWORD env variables
+router.post('/admin-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecurePassword123!';
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Email and password are required' });
+    }
+
+    if (email.toLowerCase().trim() !== adminEmail || password !== adminPassword) {
+      return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid administrator credentials' });
+    }
+
+    let user = await db.findUserByEmail(adminEmail);
+
+    if (!user) {
+      const randomHash = hashPassword(`${Math.random().toString(36).slice(2)}${Date.now()}`);
+      const created = await db.createUser({
+        name: adminEmail.split('@')[0],
+        email: adminEmail,
+        passwordHash: randomHash,
+        role: 'ADMIN'
+      });
+      user = created as User & { passwordHash: string };
+    } else if (user.role !== 'ADMIN') {
+      await db.updateUser(user.id, { role: 'ADMIN' });
+    }
+
+    await db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
+
+    const safeUser = await db.findUserById(user.id);
+    if (!safeUser) {
+      return res.status(500).json({ error: 'SERVER_ERROR', message: 'User retrieval failed' });
+    }
+
+    const token = generateToken(safeUser);
+    return res.json({ token, user: safeUser });
+  } catch (err: any) {
+    console.error('Admin login error:', err);
+    return res.status(500).json({ error: 'SERVER_ERROR', message: 'Admin login failed' });
   }
 });
 
