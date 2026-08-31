@@ -165,18 +165,23 @@ async function migrate() {
     `);
 
     // --- Seed Users ---
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@notemart.store';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecurePassword123!';
-    const users = buildSeedUsers(adminEmail, adminPassword);
-    for (const u of users) {
-      await client.query(
-        `INSERT INTO users (id, name, email, password_hash, role, created_at, updated_at, last_login_at, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (email) DO NOTHING;`,
-        [u.id, u.name, u.email, u.passwordHash, u.role, u.createdAt, u.updatedAt, u.lastLoginAt, u.isActive]
-      );
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      console.warn('[migrate] ADMIN_EMAIL or ADMIN_PASSWORD is not set. Skipping admin user seed.');
+    } else {
+      const users = buildSeedUsers(adminEmail, adminPassword);
+      for (const u of users) {
+        await client.query(
+          `INSERT INTO users (id, name, email, password_hash, role, created_at, updated_at, last_login_at, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (email) DO NOTHING;`,
+          [u.id, u.name, u.email, u.passwordHash, u.role, u.createdAt, u.updatedAt, u.lastLoginAt, u.isActive]
+        );
+      }
+      console.log(`Seeded ${users.length} users.`);
     }
-    console.log(`Seeded ${users.length} users.`);
 
     // --- Seed Categories ---
     for (const c of INITIAL_CATEGORIES) {

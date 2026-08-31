@@ -4,7 +4,11 @@ import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { User } from '../src/types';
 
-const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET || 'secret-jwt-key-ebook-store-2026';
+const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('[auth] AUTH_SECRET (or JWT_SECRET) is not set. JWT authentication will fail.');
+}
 
 export interface AuthRequest extends Request {
   user?: User;

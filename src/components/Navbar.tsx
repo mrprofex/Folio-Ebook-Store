@@ -74,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onSearc
             {isAdmin && (
               <button
                 id="nav-link-admin-panel"
-                onClick={() => handleNav('/admin')}
+                onClick={() => handleNav('/admin/dashboard')}
                 className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider bg-[#8B2635]/10 text-[#8B2635] hover:bg-[#8B2635]/20 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Shield className="w-3.5 h-3.5" />
@@ -242,7 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate, onSearc
 
               {isAdmin && (
                 <button
-                  onClick={() => handleNav('/admin')}
+                  onClick={() => handleNav('/admin/dashboard')}
                   className="w-full text-left py-2 text-sm font-bold text-[#8B2635] border-b border-[#E8E2D9]/60 flex items-center justify-between"
                 >
                   <span>Admin Dashboard</span>

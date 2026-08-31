@@ -5,6 +5,16 @@ import { hashPassword, comparePassword, generateToken, authMiddleware, AuthReque
 
 const router = Router();
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD ? hashPassword(process.env.ADMIN_PASSWORD) : null;
+
+if (!ADMIN_EMAIL) {
+  console.warn('[auth] ADMIN_EMAIL is not set. Admin login will be unavailable.');
+}
+if (!ADMIN_PASSWORD_HASH) {
+  console.warn('[auth] ADMIN_PASSWORD is not set. Admin login will be unavailable.');
+}
+
 // Register new user
 router.post('/register', async (req, res) => {
   try {
@@ -106,24 +116,25 @@ router.post('/admin-login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecurePassword123!';
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD_HASH) {
+      return res.status(500).json({ error: 'SERVER_ERROR', message: 'Admin authentication is not configured on the server.' });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Email and password are required' });
     }
 
-    if (email.toLowerCase().trim() !== adminEmail || password !== adminPassword) {
+    if (email.toLowerCase().trim() !== ADMIN_EMAIL || !comparePassword(password, ADMIN_PASSWORD_HASH)) {
       return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid administrator credentials' });
     }
 
-    let user = await db.findUserByEmail(adminEmail);
+    let user = await db.findUserByEmail(ADMIN_EMAIL);
 
     if (!user) {
       const randomHash = hashPassword(`${Math.random().toString(36).slice(2)}${Date.now()}`);
       const created = await db.createUser({
-        name: adminEmail.split('@')[0],
-        email: adminEmail,
+        name: ADMIN_EMAIL.split('@')[0],
+        email: ADMIN_EMAIL,
         passwordHash: randomHash,
         role: 'ADMIN'
       });
