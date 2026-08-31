@@ -7,8 +7,7 @@
     "api/index.ts": {
       "maxDuration": 30,
       "includeFiles": [
-        "server/**",
-        "dist/**"
+        "server/**"
       ]
     }
   },
