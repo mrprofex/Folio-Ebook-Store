@@ -11,11 +11,15 @@ const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
 const PDFS_DIR = path.join(UPLOADS_DIR, 'pdfs');
 
-[UPLOADS_DIR, COVERS_DIR, PDFS_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
+try {
+  [UPLOADS_DIR, COVERS_DIR, PDFS_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+} catch (err) {
+  console.warn('Could not create upload directories (read-only filesystem?):', err);
+}
 
 // Configure Multer storage
 const storage = multer.diskStorage({
