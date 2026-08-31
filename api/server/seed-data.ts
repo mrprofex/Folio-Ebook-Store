@@ -1,13 +1,5 @@
 import bcrypt from 'bcryptjs';
-import {
-  User,
-  Ebook,
-  Purchase,
-  Coupon,
-  CouponUsage,
-  Category,
-  BonusItem
-} from '../src/types';
+import { User, Ebook, Category, Coupon, Purchase, CouponUsage } from '../src/types/index';
 
 // Initial Sample Categories
 export const INITIAL_CATEGORIES: Category[] = [

@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, Client } from 'pg';
 import dotenv from 'dotenv';
 import {
   User,
@@ -12,7 +12,7 @@ import {
   ComboItem,
   AccessEntitlement,
   PublicationType
-} from '../src/types';
+} from '../src/types/index';
 
 dotenv.config();
 
