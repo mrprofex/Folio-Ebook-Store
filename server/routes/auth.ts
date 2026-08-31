@@ -6,13 +6,17 @@ import { hashPassword, comparePassword, generateToken, authMiddleware, AuthReque
 const router = Router();
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD ? hashPassword(process.env.ADMIN_PASSWORD) : null;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD_HASH = ADMIN_PASSWORD ? hashPassword(ADMIN_PASSWORD) : null;
 
 if (!ADMIN_EMAIL) {
   console.warn('[auth] ADMIN_EMAIL is not set. Admin login will be unavailable.');
 }
-if (!ADMIN_PASSWORD_HASH) {
+if (!ADMIN_PASSWORD) {
   console.warn('[auth] ADMIN_PASSWORD is not set. Admin login will be unavailable.');
+}
+if (ADMIN_EMAIL && ADMIN_PASSWORD) {
+  console.log('[auth] Admin credentials configured for:', ADMIN_EMAIL);
 }
 
 // Register new user

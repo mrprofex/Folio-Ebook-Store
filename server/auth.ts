@@ -4,10 +4,10 @@ import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { User } from '../src/types';
 
-const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET;
+const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET || 'default-secret-change-in-production';
 
-if (!JWT_SECRET) {
-  console.error('[auth] AUTH_SECRET (or JWT_SECRET) is not set. JWT authentication will fail.');
+if (!process.env.AUTH_SECRET && !process.env.JWT_SECRET) {
+  console.error('[auth] AUTH_SECRET (or JWT_SECRET) is not set. Using default secret which is insecure for production.');
 }
 
 export interface AuthRequest extends Request {
@@ -39,9 +39,9 @@ export function comparePassword(password: string, hash: string): boolean {
  * Validates audience, issuer, expiry and email verification via Google's tokeninfo endpoint.
  */
 export async function verifyGoogleIdToken(idToken: string): Promise<{ email: string; name?: string } | null> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
   if (!clientId) {
-    console.error('GOOGLE_CLIENT_ID is not configured on the server.');
+    console.error('GOOGLE_CLIENT_ID or VITE_GOOGLE_CLIENT_ID is not configured on the server.');
     return null;
   }
 
