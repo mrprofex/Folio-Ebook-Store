@@ -40,7 +40,7 @@ export const GoogleLoginButton: React.FC<{
     let cancelled = false;
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
-    if (!clientId || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
+    if (!clientId || clientId.toLowerCase().includes('your-google-client-id')) {
       const msg = 'Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID in your environment.';
       onError?.(msg);
       setLocalError(msg);

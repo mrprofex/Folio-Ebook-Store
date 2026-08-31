@@ -76,10 +76,19 @@ router.post('/google', async (req, res) => {
 
     const email = payload.email.toLowerCase().trim();
     const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-    const isAdmin = Boolean(adminEmail) && email === adminEmail;
     const name = (payload.name || email.split('@')[0]).trim();
 
     let user = await db.findUserByEmail(email);
+
+    // Administrators must use the dedicated email/password flow at /admin.
+    // Do not allow a configured admin account to receive an admin session via
+    // the public Google sign-in endpoint.
+    if (email === adminEmail || user?.role === 'ADMIN') {
+      return res.status(403).json({
+        error: 'ADMIN_GOOGLE_LOGIN_DISABLED',
+        message: 'Administrator accounts must sign in with email and password from the admin login page.'
+      });
+    }
 
     if (!user) {
       // First-time Google user: create an account (random password, never used for login)
@@ -88,12 +97,9 @@ router.post('/google', async (req, res) => {
         name,
         email,
         passwordHash: randomHash,
-        role: isAdmin ? 'ADMIN' : 'USER'
+        role: 'USER'
       });
       user = created as User & { passwordHash: string };
-    } else if (isAdmin && user.role !== 'ADMIN') {
-      // Promote to admin if this Google account is the configured admin email
-      await db.updateUser(user.id, { role: 'ADMIN' });
     }
 
     await db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
