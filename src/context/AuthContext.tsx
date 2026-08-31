@@ -76,27 +76,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const googleLogin = async (idToken: string) => {
-    const data = await apiRequest<AuthResponse>('/api/auth/google', {
-      method: 'POST',
-      body: JSON.stringify({ idToken })
-    });
+    try {
+      const data = await apiRequest<AuthResponse>('/api/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ idToken })
+      });
 
-    setStoredToken(data.token);
-    setToken(data.token);
-    setUser(data.user);
-    setIsAuthModalOpen(false);
+      setStoredToken(data.token);
+      setToken(data.token);
+      setUser(data.user);
+      setIsAuthModalOpen(false);
+    } catch (err: any) {
+      console.error('Google login failed:', err);
+      if (err.status === 401) {
+        throw new Error('Google authentication failed. Please try again or use email login.');
+      } else if (err.message) {
+        throw new Error(err.message);
+      }
+      throw new Error('Google sign-in failed. Please try again later.');
+    }
   };
 
   const adminLogin = async (email: string, password: string) => {
-    const data = await apiRequest<AuthResponse>('/api/auth/admin-login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
-    });
+    try {
+      const data = await apiRequest<AuthResponse>('/api/auth/admin-login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
 
-    setStoredToken(data.token);
-    setToken(data.token);
-    setUser(data.user);
-    setIsAuthModalOpen(false);
+      setStoredToken(data.token);
+      setToken(data.token);
+      setUser(data.user);
+      setIsAuthModalOpen(false);
+    } catch (err: any) {
+      console.error('Admin login failed:', err);
+      if (err.status === 401) {
+        throw new Error('Invalid administrator credentials. Please check your email and password.');
+      } else if (err.status === 403) {
+        throw new Error('Your account does not have administrator privileges.');
+      } else if (err.message) {
+        throw new Error(err.message);
+      }
+      throw new Error('Admin login failed. Please try again later.');
+    }
   };
 
   const logout = () => {

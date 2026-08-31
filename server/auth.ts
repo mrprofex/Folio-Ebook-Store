@@ -43,14 +43,32 @@ export async function verifyGoogleIdToken(idToken: string): Promise<{ email: str
 
   try {
     const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      console.error('Google tokeninfo request failed:', resp.status, resp.statusText);
+      return null;
+    }
     const payload: any = await resp.json();
 
-    if (payload.aud !== clientId) return null;
-    if (payload.iss !== 'accounts.google.com' && payload.iss !== 'https://accounts.google.com') return null;
-    if (Number(payload.exp) * 1000 < Date.now()) return null;
-    if (payload.email_verified === 'false' || payload.email_verified === false) return null;
-    if (!payload.email) return null;
+    if (payload.aud !== clientId) {
+      console.error('Google token audience mismatch. Expected:', clientId, 'Got:', payload.aud);
+      return null;
+    }
+    if (payload.iss !== 'accounts.google.com' && payload.iss !== 'https://accounts.google.com') {
+      console.error('Google token issuer invalid:', payload.iss);
+      return null;
+    }
+    if (Number(payload.exp) * 1000 < Date.now()) {
+      console.error('Google token expired:', new Date(Number(payload.exp) * 1000).toISOString());
+      return null;
+    }
+    if (payload.email_verified === 'false' || payload.email_verified === false) {
+      console.error('Google email not verified for:', payload.email);
+      return null;
+    }
+    if (!payload.email) {
+      console.error('Google token missing email');
+      return null;
+    }
 
     return { email: payload.email, name: payload.name };
   } catch (err) {
