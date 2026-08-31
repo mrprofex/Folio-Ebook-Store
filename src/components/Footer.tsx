@@ -115,7 +115,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/privacy')}
+                  onClick={() => onNavigate('/privacy-policy')}
                   className="hover:text-[#FBF9F5] transition-colors cursor-pointer"
                 >
                   Privacy Policy
@@ -123,7 +123,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/refund-policy')}
+                  onClick={() => onNavigate('/refunds')}
                   className="hover:text-[#FBF9F5] transition-colors cursor-pointer"
                 >
                   Refund Policy

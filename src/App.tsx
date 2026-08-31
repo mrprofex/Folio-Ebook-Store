@@ -334,9 +334,10 @@ function MainApp() {
         </AdminLayout>
       );
     }
-  } else if (['/terms', '/privacy', '/refunds', '/contact'].includes(currentPath)) {
-    const sec = currentPath.replace('/', '') as 'terms' | 'privacy' | 'refunds' | 'contact';
-    viewContent = <LegalPage section={sec} onNavigate={navigate} />;
+  } else if (['/terms', '/terms-of-service', '/privacy', '/privacy-policy', '/refunds', '/contact'].includes(currentPath)) {
+    const rawSection = currentPath.replace('/', '') as 'terms' | 'privacy' | 'refunds' | 'contact' | 'terms-of-service' | 'privacy-policy';
+    const section = rawSection === 'terms-of-service' ? 'terms' : rawSection === 'privacy-policy' ? 'privacy' : rawSection;
+    viewContent = <LegalPage section={section} onNavigate={navigate} />;
   } else {
     // Default fallback to 404 or home
     viewContent = (
