@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowLeft, ShieldCheck, Mail, FileText, RefreshCw } from 'lucide-react';
 
 interface LegalPageProps {
-  section: 'terms' | 'privacy' | 'refunds' | 'contact';
+  section: 'terms' | 'privacy' | 'refunds' | 'contact' | 'delivery';
   onNavigate: (path: string) => void;
 }
 
@@ -114,6 +114,40 @@ export const LegalPage: React.FC<LegalPageProps> = ({ section, onNavigate }) => 
                 <p className="text-xs text-[#736B63]">submissions@folio-publishing.com</p>
               </div>
             </div>
+          </>
+        )}
+
+        {section === 'delivery' && (
+          <>
+            <span className="text-xs font-semibold uppercase tracking-widest text-[#8B2635] block mb-1">
+              Fulfillment
+            </span>
+            <h1 className="font-serif text-3xl font-bold text-[#1A1817] border-b border-[#E8E2D9] pb-4">
+              Digital Delivery Policy
+            </h1>
+            <p>
+              FOLIO is a digital publishing platform that sells ebook and PDF publications only. We do not sell or ship physical products.
+            </p>
+            <h3 className="font-serif font-bold text-base text-[#1A1817] mt-4">1. Digital Products Only</h3>
+            <p>
+              All products available for purchase on this website are digital ebook files in PDF format. No physical books, printed materials, or tangible items are sold or shipped.
+            </p>
+            <h3 className="font-serif font-bold text-base text-[#1A1817] mt-4">2. Instant Digital Delivery</h3>
+            <p>
+              After successful payment verification through Razorpay, your purchased ebook becomes immediately available in your account library. You can download the PDF file directly from the product page or your "My Purchased Library" section. No physical shipping is required.
+            </p>
+            <h3 className="font-serif font-bold text-base text-[#1A1817] mt-4">3. No Shipping Charges</h3>
+            <p>
+              Since all products are digital, there are no shipping fees, handling charges, or delivery costs. The price displayed at checkout is the final price you pay.
+            </p>
+            <h3 className="font-serif font-bold text-base text-[#1A1817] mt-4">4. Lifetime Access</h3>
+            <p>
+              Once purchased, the ebook is permanently associated with your account. You can re-download your purchased files at any time from your library, on any device, without additional charges.
+            </p>
+            <h3 className="font-serif font-bold text-base text-[#1A1817] mt-4">5. Technical Issues</h3>
+            <p>
+              If you experience any technical difficulties accessing or downloading your purchased ebook after successful payment, please contact our support team at <strong>support@folio-publishing.com</strong>. We will assist you in resolving the issue promptly.
+            </p>
           </>
         )}
       </div>

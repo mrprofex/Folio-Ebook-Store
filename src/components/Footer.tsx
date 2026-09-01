@@ -98,6 +98,14 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   Account Settings
                 </button>
               </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('/about')}
+                  className="hover:text-[#FBF9F5] transition-colors cursor-pointer"
+                >
+                  About FOLIO
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -135,6 +143,14 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   className="hover:text-[#FBF9F5] transition-colors cursor-pointer"
                 >
                   Contact Support
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('/delivery')}
+                  className="hover:text-[#FBF9F5] transition-colors cursor-pointer"
+                >
+                  Digital Delivery
                 </button>
               </li>
             </ul>

@@ -19,6 +19,7 @@ import { AdminPurchasesPage } from './pages/AdminPurchasesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { LegalPage } from './pages/LegalPage';
+import { AboutPage } from './pages/AboutPage';
 import { Ebook, Purchase } from './types';
 import { apiRequest } from './lib/api';
 import { GlobalLoader } from './components/GlobalLoader';
@@ -273,10 +274,12 @@ function MainApp() {
         </AdminLayout>
       );
     }
-  } else if (['/terms', '/terms-of-service', '/privacy', '/privacy-policy', '/refunds', '/contact'].includes(currentPath)) {
-    const rawSection = currentPath.replace('/', '') as 'terms' | 'privacy' | 'refunds' | 'contact' | 'terms-of-service' | 'privacy-policy';
+  } else if (['/terms', '/terms-of-service', '/privacy', '/privacy-policy', '/refunds', '/contact', '/delivery'].includes(currentPath)) {
+    const rawSection = currentPath.replace('/', '') as 'terms' | 'privacy' | 'refunds' | 'contact' | 'delivery' | 'terms-of-service' | 'privacy-policy';
     const section = rawSection === 'terms-of-service' ? 'terms' : rawSection === 'privacy-policy' ? 'privacy' : rawSection;
     viewContent = <LegalPage section={section} onNavigate={navigate} />;
+  } else if (currentPath === '/about') {
+    viewContent = <AboutPage onNavigate={navigate} />;
   } else {
     // Default fallback to 404 or home
     viewContent = (
