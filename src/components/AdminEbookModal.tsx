@@ -585,8 +585,8 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
 
     // Validation for Combo Publications
     if (publicationType === 'COMBO') {
-      if (comboItems.length < 2) {
-        setError('A Combo Package must contain at least 2 volumes. Please add volumes in the Combo Builder tab.');
+      if (comboItems.length < 1) {
+        setError('A Combo Package must contain at least 1 volume. Please add volumes in the Combo Builder tab.');
         setActiveTab('combo');
         return;
       }

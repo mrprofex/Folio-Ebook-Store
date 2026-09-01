@@ -73,9 +73,9 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
       const ebooksData = await ebooksRes.json();
 
       setCoupons(couponsData.coupons || []);
-      setEbooks(ebooksData || []);
-      if (ebooksData && ebooksData.length > 0 && !formData.ebookId) {
-        setFormData(prev => ({ ...prev, ebookId: ebooksData[0].id }));
+      setEbooks(ebooksData.ebooks || []);
+      if (ebooksData.ebooks && ebooksData.ebooks.length > 0 && !formData.ebookId) {
+        setFormData(prev => ({ ...prev, ebookId: ebooksData.ebooks[0].id }));
       }
     } catch (err: any) {
       console.error('Error fetching admin coupon data:', err);
