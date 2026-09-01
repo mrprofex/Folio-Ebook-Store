@@ -290,7 +290,7 @@ class Database {
       agg[r.user_id].count += 1;
       agg[r.user_id].spent += Number(r.amount);
     }
-    return usersRes.rows.map(u => {
+    return usersRes.rows.map((u: any) => {
       const user = mapUser(u);
       const a = agg[u.id] || { count: 0, spent: 0 };
       return {
@@ -341,13 +341,13 @@ class Database {
     let list = res.rows.map(mapEbook);
 
     if (options.sort === 'price_asc') {
-      list.sort((a, b) => a.price - b.price);
+      list.sort((a: any, b: any) => a.price - b.price);
     } else if (options.sort === 'price_desc') {
-      list.sort((a, b) => b.price - a.price);
+      list.sort((a: any, b: any) => b.price - a.price);
     } else if (options.sort === 'featured') {
-      list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+      list.sort((a: any, b: any) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     } else {
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
     const coupons = await this.loadAllCoupons();
@@ -530,7 +530,7 @@ class Database {
     }
     const res = await pool.query(sql, params);
     const counts = await this.categoryBookCounts();
-    return res.rows.map(r => {
+    return res.rows.map((r: any) => {
       const c = mapCategory(r);
       return { ...c, ebookCount: counts.get(c.name) || 0 };
     });
@@ -1014,12 +1014,12 @@ class Database {
     );
     const ebookMap = await this.loadEbookMap();
     const userMap = await this.loadUserMap();
-    const successfulPurchases = purchasesRes.rows.map(r => r);
+    const successfulPurchases = purchasesRes.rows.map((r: any) => r);
 
-    const totalEarnings = successfulPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
+    const totalEarnings = successfulPurchases.reduce((acc: number, r: any) => acc + Number(r.amount), 0);
     const today = new Date().toISOString().split('T')[0];
-    const todayPurchases = successfulPurchases.filter(r => String(r.purchased_at).startsWith(today));
-    const todayEarnings = todayPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
+    const todayPurchases = successfulPurchases.filter((r: any) => String(r.purchased_at).startsWith(today));
+    const todayEarnings = todayPurchases.reduce((acc: number, r: any) => acc + Number(r.amount), 0);
 
     const totalPurchases = successfulPurchases.length;
     const usersCount = (await pool.query('SELECT COUNT(*)::int AS c FROM users')).rows[0].c;
@@ -1031,7 +1031,7 @@ class Database {
       [now]
     )).rows[0].c;
     const totalCouponUses = (await pool.query('SELECT COUNT(*)::int AS c FROM coupon_usages')).rows[0].c;
-    const totalDiscountsGiven = successfulPurchases.reduce((acc, r) => acc + Number(r.discount_amount || 0), 0);
+    const totalDiscountsGiven = successfulPurchases.reduce((acc: number, r: any) => acc + Number(r.discount_amount || 0), 0);
 
     const recentPurchases: Purchase[] = [];
     for (const r of successfulPurchases.slice(0, 10)) {
@@ -1055,8 +1055,8 @@ class Database {
 
     const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
     const revenueByMonth = months.map((m, monthIndex) => {
-      const salesInMonth = successfulPurchases.filter(p => new Date(p.purchased_at).getMonth() === monthIndex + 2);
-      const rev = salesInMonth.reduce((acc, c) => acc + Number(c.amount), 0);
+      const salesInMonth = successfulPurchases.filter((p: any) => new Date(p.purchased_at).getMonth() === monthIndex + 2);
+      const rev = salesInMonth.reduce((acc: number, c: any) => acc + Number(c.amount), 0);
       return {
         month: m,
         revenue: rev > 0 ? Number(rev.toFixed(2)) : Math.floor(totalEarnings * (0.1 + monthIndex * 0.05)),
