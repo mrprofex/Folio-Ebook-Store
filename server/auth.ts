@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { db } from './db';
-import { User } from '../src/types';
+import { db } from './db.js';
+import { User } from '../src/types.js';
 
 const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET || 'default-secret-change-in-production';
 

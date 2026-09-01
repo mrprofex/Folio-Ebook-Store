@@ -7,7 +7,7 @@ import {
   CouponUsage,
   Category,
   BonusItem
-} from '../src/types';
+} from '../src/types.js';
 
 // Initial Sample Categories
 export const INITIAL_CATEGORIES: Category[] = [

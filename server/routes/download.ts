@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { db } from '../db';
-import { authMiddleware, AuthRequest } from '../auth';
+import { db } from '../db.js';
+import { authMiddleware, AuthRequest } from '../auth.js';
 
 const router = Router();
 

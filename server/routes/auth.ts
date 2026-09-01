@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
-import { User } from '../../src/types';
-import { hashPassword, comparePassword, generateToken, authMiddleware, AuthRequest, verifyGoogleIdToken } from '../auth';
+import { db } from '../db.js';
+import { User } from '../../src/types.js';
+import { hashPassword, comparePassword, generateToken, authMiddleware, AuthRequest, verifyGoogleIdToken } from '../auth.js';
 
 const router = Router();
 

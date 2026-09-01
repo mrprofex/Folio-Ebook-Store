@@ -12,7 +12,7 @@ import {
   ComboItem,
   AccessEntitlement,
   PublicationType
-} from '../src/types';
+} from '../src/types.js';
 
 dotenv.config();
 
