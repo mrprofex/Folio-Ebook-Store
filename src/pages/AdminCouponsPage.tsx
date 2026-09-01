@@ -63,7 +63,7 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
 
       const [couponsRes, ebooksRes] = await Promise.all([
         fetch('/api/admin/coupons', { headers }),
-        fetch('/api/admin/ebooks', { headers })
+        fetch('/api/ebooks', { headers })
       ]);
 
       if (!couponsRes.ok) throw new Error('Failed to load coupons');
@@ -73,9 +73,9 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
       const ebooksData = await ebooksRes.json();
 
       setCoupons(couponsData.coupons || []);
-      setEbooks(ebooksData.ebooks || []);
-      if (ebooksData.ebooks && ebooksData.ebooks.length > 0 && !formData.ebookId) {
-        setFormData(prev => ({ ...prev, ebookId: ebooksData.ebooks[0].id }));
+      setEbooks(ebooksData || []);
+      if (ebooksData && ebooksData.length > 0 && !formData.ebookId) {
+        setFormData(prev => ({ ...prev, ebookId: ebooksData[0].id }));
       }
     } catch (err: any) {
       console.error('Error fetching admin coupon data:', err);
