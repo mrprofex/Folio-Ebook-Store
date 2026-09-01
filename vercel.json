@@ -3,6 +3,12 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "includeFiles": ["server/**"]
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",
