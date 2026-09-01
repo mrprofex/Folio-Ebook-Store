@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../db';
-import { User } from '../../src/types/index';
+import { User } from '../../../src/types';
 import { hashPassword, comparePassword, generateToken, authMiddleware, AuthRequest, verifyGoogleIdToken } from '../auth';
 
 const router = Router();
