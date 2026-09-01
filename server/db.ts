@@ -896,15 +896,16 @@ class Database {
     await pool.query(
       `INSERT INTO purchases (
         id, user_id, ebook_id, amount, original_amount, discount_amount, final_amount, currency,
-        razorpay_order_id, payment_status, purchased_at, download_count, publication_type,
-        combo_items_snapshot, bonus_items_snapshot, coupon_id, coupon_code_snapshot,
-        has_bonus, bonus_ebook_id, bonus_title, bonus_cover_image_url, bonus_download_count
+        razorpay_order_id, razorpay_payment_id, razorpay_signature, payment_status, purchased_at,
+        download_count, last_downloaded_at, publication_type, combo_items_snapshot, entitlements,
+        bonus_items_snapshot, coupon_id, coupon_code_snapshot, has_bonus, bonus_ebook_id,
+        bonus_title, bonus_cover_image_url, bonus_download_count, bonus_last_downloaded_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,'PENDING',$10,0,$11,$12,$13,$14,$15,$16,$17,$18,$19
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PENDING',$12,0,NULL,$13,$14,NULL,$15,$16,$17,$18,$19,$20,$21,NULL
       )`,
       [
         id, data.userId, data.ebookId, data.amount, data.originalAmount ?? data.amount, data.discountAmount ?? 0,
-        data.amount, data.currency, data.razorpayOrderId, now, publicationType, jsonVal(comboItemsSnapshot),
+        data.amount, data.currency, data.razorpayOrderId, null, null, now, publicationType, jsonVal(comboItemsSnapshot),
         jsonVal(bonusItemsSnapshot), data.couponId ?? null, data.couponCodeSnapshot ?? null, hasBonus,
         bonusEbookId ?? null, bonusTitle ?? null, bonusCoverImageUrl ?? null
       ]
