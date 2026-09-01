@@ -5,13 +5,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-import authRoutes from '../server/routes/auth';
-import ebooksRoutes from '../server/routes/ebooks';
-import paymentsRoutes from '../server/routes/payments';
-import downloadRoutes from '../server/routes/download';
-import userRoutes from '../server/routes/user';
-import adminRoutes from '../server/routes/admin';
-import uploadRoutes from '../server/routes/upload';
+import authRoutes from '../server/routes/auth.js';
+import ebooksRoutes from '../server/routes/ebooks.js';
+import paymentsRoutes from '../server/routes/payments.js';
+import downloadRoutes from '../server/routes/download.js';
+import userRoutes from '../server/routes/user.js';
+import adminRoutes from '../server/routes/admin.js';
+import uploadRoutes from '../server/routes/upload.js';
 
 const app = express();
 
