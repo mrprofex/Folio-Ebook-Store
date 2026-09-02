@@ -6,16 +6,16 @@ import { authMiddleware, AuthRequest } from '../auth.js';
 
 const router = Router();
 
-// Lazy initialization of Razorpay SDK to handle missing keys gracefully
+// Lazy initialization of Razorpay SDK
 const getRazorpayInstance = () => {
   const key_id = process.env.RAZORPAY_KEY_ID;
   const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
-  if (key_id && key_secret && !key_id.includes('sample') && !key_secret.includes('sample')) {
+  if (key_id && key_secret) {
     try {
       return new Razorpay({ key_id, key_secret });
     } catch (e) {
-      console.warn('Razorpay SDK initialization failed, falling back to simulated sandbox mode:', e);
+      console.error('Razorpay SDK initialization failed:', e);
     }
   }
   return null;
@@ -135,28 +135,28 @@ router.post('/create-order', authMiddleware, async (req: AuthRequest, res: Respo
     const amountInPaise = Math.round(finalPrice * 100);
 
     const razorpay = getRazorpayInstance();
-    let orderId: string;
-
-    if (razorpay) {
-      // Live Razorpay API order creation
-      const order = await razorpay.orders.create({
-        amount: amountInPaise,
-        currency,
-        receipt: `rcpt_${Date.now().toString().slice(-8)}`,
-        notes: {
-          userId: user.id,
-          userEmail: user.email,
-          ebookId: ebook.id,
-          ebookTitle: ebook.title,
-          couponCode: appliedCouponCode || 'NONE',
-          discountAmount: discountAmount.toString()
-        }
+    if (!razorpay) {
+      return res.status(500).json({
+        error: 'PAYMENT_CONFIG_ERROR',
+        message: 'Razorpay payment configuration is missing. Please contact support.'
       });
-      orderId = order.id;
-    } else {
-      // Sandbox / Test Mode order generation
-      orderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     }
+
+    // Create Razorpay order (works for both Test Mode and Live Mode)
+    const order = await razorpay.orders.create({
+      amount: amountInPaise,
+      currency,
+      receipt: `rcpt_${Date.now().toString().slice(-8)}`,
+      notes: {
+        userId: user.id,
+        userEmail: user.email,
+        ebookId: ebook.id,
+        ebookTitle: ebook.title,
+        couponCode: appliedCouponCode || 'NONE',
+        discountAmount: discountAmount.toString()
+      }
+    });
+    const orderId = order.id;
 
     // Store pending purchase in database with exact snapshot of prices and coupon
     await db.createPurchaseOrder({
@@ -172,6 +172,7 @@ router.post('/create-order', authMiddleware, async (req: AuthRequest, res: Respo
     });
 
     const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_public_demo';
+    const isTestMode = keyId.startsWith('rzp_test_');
 
     return res.json({
       orderId,
@@ -185,7 +186,7 @@ router.post('/create-order', authMiddleware, async (req: AuthRequest, res: Respo
       ebookId: ebook.id,
       userEmail: user.email,
       userName: user.name,
-      isTestMode: !razorpay,
+      isTestMode,
       couponApplied: appliedCouponCode ? {
         code: appliedCouponCode,
         discountPercentage: couponDiscountPercentage,

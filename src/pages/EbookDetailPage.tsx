@@ -238,7 +238,7 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
           name: 'FOLIO Bookstore',
           description: `Digital License: ${orderData.ebookTitle}`,
           image: ebook.coverImageUrl,
-          order_id: orderData.isTestMode ? undefined : orderData.orderId,
+          order_id: orderData.orderId,
           prefill: {
             name: orderData.userName,
             email: orderData.userEmail
