@@ -285,22 +285,7 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
         });
         rzp.open();
       } else {
-        // Sandbox fallback
-        const verifyRes = await apiRequest<{ success: boolean; purchase: Purchase }>(
-          '/api/payments/verify',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              razorpay_order_id: orderData.orderId,
-              razorpay_payment_id: `pay_direct_${Date.now()}`,
-              razorpay_signature: 'sig_direct_verified',
-              ebookId: ebook.id
-            })
-          }
-        );
-        setIsPurchased(true);
-        setPurchaseId(verifyRes.purchase.id);
-        onPurchaseSuccess(verifyRes.purchase.id);
+        setError('Razorpay checkout failed to load. Please refresh the page and try again.');
         setPurchasing(false);
       }
     } catch (err: any) {
