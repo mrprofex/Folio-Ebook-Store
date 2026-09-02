@@ -81,6 +81,14 @@ export async function apiRequest<T = any>(
     }
 
     return data;
+  } catch (err: any) {
+    if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+      const networkError: any = new Error('Network error: Unable to connect to the server. Please ensure the backend is running and DATABASE_URL is configured.');
+      networkError.status = 0;
+      networkError.data = { error: 'NETWORK_ERROR', message: networkError.message };
+      throw networkError;
+    }
+    throw err;
   } finally {
     activeRequestCount = Math.max(0, activeRequestCount - 1);
     notifyLoading();
