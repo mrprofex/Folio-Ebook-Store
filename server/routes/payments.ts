@@ -171,7 +171,13 @@ router.post('/create-order', authMiddleware, async (req: AuthRequest, res: Respo
       couponCodeSnapshot: appliedCouponCode
     });
 
-    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_public_demo';
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    if (!keyId) {
+      return res.status(500).json({
+        error: 'PAYMENT_CONFIG_ERROR',
+        message: 'Razorpay payment configuration is missing. Please contact support.'
+      });
+    }
     const isTestMode = keyId.startsWith('rzp_test_');
 
     return res.json({
