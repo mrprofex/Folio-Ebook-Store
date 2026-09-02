@@ -907,7 +907,7 @@ class Database {
         id, data.userId, data.ebookId, data.amount, data.originalAmount ?? data.amount, data.discountAmount ?? 0,
         data.amount, data.currency, data.razorpayOrderId, null, null, now, publicationType, jsonVal(comboItemsSnapshot),
         jsonVal(bonusItemsSnapshot), data.couponId ?? null, data.couponCodeSnapshot ?? null, hasBonus,
-        bonusEbookId ?? null, bonusTitle ?? null, bonusCoverImageUrl ?? null, 0
+        bonusEbookId ?? null, bonusTitle ?? null, bonusCoverImageUrl ?? null
       ]
     );
     return (await this.findPurchaseById(id))!;
