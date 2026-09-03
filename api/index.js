@@ -968,10 +968,13 @@ var Database = class {
     const userMap = await this.loadUserMap();
     const successfulPurchases = purchasesRes.rows.map((r) => r);
     const totalEarnings = successfulPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
-    const today = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", {
-      timeZone: "Asia/Kolkata"
-    });
-    const todayPurchases = successfulPurchases.filter((r) => String(r.purchased_at).startsWith(today));
+    const todayPurchasesRes = await pool.query(
+      `SELECT * FROM purchases 
+       WHERE payment_status = 'SUCCESS'
+       AND purchased_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone
+       AND purchased_at < ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone`
+    );
+    const todayPurchases = todayPurchasesRes.rows;
     const todayEarnings = todayPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
     const totalPurchases = successfulPurchases.length;
     const usersCount = (await pool.query("SELECT COUNT(*)::int AS c FROM users")).rows[0].c;
