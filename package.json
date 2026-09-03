@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild api/index.ts --bundle --platform=node --format=cjs --external:pg --external:razorpay --external:jsonwebtoken --external:bcryptjs --external:cloudinary --external:multer --sourcemap --outfile=dist/api/index.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild api/index.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=api/index.js",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js api/index.js",
     "lint": "tsc --noEmit",
