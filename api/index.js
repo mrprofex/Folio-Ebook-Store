@@ -968,7 +968,9 @@ var Database = class {
     const userMap = await this.loadUserMap();
     const successfulPurchases = purchasesRes.rows.map((r) => r);
     const totalEarnings = successfulPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
-    const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const today = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata"
+    });
     const todayPurchases = successfulPurchases.filter((r) => String(r.purchased_at).startsWith(today));
     const todayEarnings = todayPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
     const totalPurchases = successfulPurchases.length;

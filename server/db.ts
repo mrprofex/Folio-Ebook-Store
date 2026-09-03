@@ -1018,7 +1018,9 @@ class Database {
     const successfulPurchases = purchasesRes.rows.map(r => r);
 
     const totalEarnings = successfulPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', {
+      timeZone: 'Asia/Kolkata'
+    });
     const todayPurchases = successfulPurchases.filter(r => String(r.purchased_at).startsWith(today));
     const todayEarnings = todayPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
 
