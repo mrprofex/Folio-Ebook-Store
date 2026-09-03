@@ -4,7 +4,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/index.js": {
+    "dist/api/index.js": {
       "maxDuration": 30,
       "includeFiles": "server/**"
     }
@@ -12,7 +12,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api/index.js"
+      "destination": "/dist/api/index.js"
     },
     {
       "source": "/(.*)",

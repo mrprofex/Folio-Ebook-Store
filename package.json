@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild api/index.ts --bundle --platform=node --format=cjs --external:express --external:pg --external:razorpay --external:jsonwebtoken --external:bcryptjs --external:dotenv --external:multer --external:cloudinary --sourcemap --outfile=api/index.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild api/index.ts --bundle --platform=node --format=cjs --external:express --external:pg --external:razorpay --external:jsonwebtoken --external:bcryptjs --external:dotenv --external:multer --external:cloudinary --sourcemap --outfile=dist/api/index.js",
     "start": "node dist/server.cjs",
-    "clean": "rm -rf dist server.js api/index.js",
+    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "db:migrate": "tsx server/db-migrate.ts"
   },
