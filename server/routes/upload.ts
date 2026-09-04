@@ -55,13 +55,12 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     }
 
     const resourceType = isImage ? 'image' : 'raw';
+    const folder = isImage ? 'ebooks/covers' : 'ebooks/pdfs';
     console.log('[UPLOAD] Is image:', isImage, 'Is PDF:', isPdf, 'Resource type:', resourceType);
 
     // If Cloudinary configured, upload to Cloudinary from memory buffer
     if (isCloudinaryConfigured) {
       try {
-        const folder = isImage ? 'ebooks/covers' : 'ebooks/pdfs';
-        
         console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType);
         
         // Convert buffer to base64 for Cloudinary upload
