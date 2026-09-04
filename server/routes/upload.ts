@@ -86,16 +86,28 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
         });
       } catch (cloudErr: any) {
         console.error('[UPLOAD] Cloudinary upload error:', cloudErr.message);
-        console.error('[UPLOAD] Cloudinary error code:', cloudErr.http_code || cloudErr.code || 'N/A');
-        console.error('[UPLOAD] Cloudinary error details:', JSON.stringify(cloudErr, null, 2));
+        console.error('[UPLOAD] Cloudinary HTTP status:', cloudErr.http_code || 'N/A');
+        console.error('[UPLOAD] Cloudinary error code:', cloudErr.code || 'N/A');
+        console.error('[UPLOAD] Cloudinary error name:', cloudErr.name || 'N/A');
+        
+        // Log safe response body details
+        if (cloudErr.response) {
+          console.error('[UPLOAD] Cloudinary response body:', JSON.stringify(cloudErr.response, null, 2));
+        }
+        
+        // Log upload parameters that were used
+        console.error('[UPLOAD] Upload params - resource_type:', resourceType, 'folder:', folder);
+        console.error('[UPLOAD] File mimetype:', req.file.mimetype, 'size:', req.file.size);
         
         // Return actual Cloudinary error details without exposing secrets
         const errorMessage = cloudErr.message || 'Cloudinary upload failed';
         const errorCode = cloudErr.http_code || cloudErr.code || 'UNKNOWN';
+        const errorDetails = cloudErr.response ? JSON.stringify(cloudErr.response) : '';
         
         return res.status(500).json({ 
           error: 'CLOUDINARY_UPLOAD_FAILED', 
-          message: `Cloudinary upload failed (Error ${errorCode}): ${errorMessage}` 
+          message: `Cloudinary upload failed (Error ${errorCode}): ${errorMessage}`,
+          details: errorDetails ? `Server response: ${errorDetails.substring(0, 200)}` : undefined
         });
       }
     }
