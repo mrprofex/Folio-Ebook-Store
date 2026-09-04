@@ -238,19 +238,19 @@ router.post('/verify', authMiddleware, async (req: AuthRequest, res: Response) =
 
     // Cryptographic signature verification
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    let isValid = false;
-
-    if (keySecret && !keySecret.includes('sample')) {
-      const generatedSignature = crypto
-        .createHmac('sha256', keySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      isValid = generatedSignature === razorpay_signature;
-    } else {
-      // In sandbox preview mode when credentials are in test state, verify test signature or standard format
-      isValid = Boolean(razorpay_payment_id && razorpay_order_id);
+    if (!keySecret) {
+      return res.status(500).json({
+        error: 'PAYMENT_CONFIG_ERROR',
+        message: 'Razorpay payment configuration is missing. Please contact support.'
+      });
     }
+
+    const generatedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    const isValid = generatedSignature === razorpay_signature;
 
     if (!isValid) {
       await db.markPurchaseFailed(razorpay_order_id);
@@ -264,7 +264,7 @@ router.post('/verify', authMiddleware, async (req: AuthRequest, res: Response) =
     const completedPurchase = await db.verifyAndCompletePurchase(
       razorpay_order_id,
       razorpay_payment_id,
-      razorpay_signature || 'sig_verified_demo'
+      razorpay_signature
     );
 
     if (!completedPurchase) {

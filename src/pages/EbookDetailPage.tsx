@@ -254,9 +254,9 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
                 {
                   method: 'POST',
                   body: JSON.stringify({
-                    razorpay_order_id: response.razorpay_order_id || orderData.orderId,
-                    razorpay_payment_id: response.razorpay_payment_id || `pay_${Date.now()}`,
-                    razorpay_signature: response.razorpay_signature || 'sig_demo_verified',
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
                     ebookId: ebook.id
                   })
                 }
