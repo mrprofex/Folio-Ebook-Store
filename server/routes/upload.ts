@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
+import { Readable } from 'stream';
 import { authMiddleware, adminMiddleware } from '../auth.js';
 
 const router = Router();
@@ -64,16 +65,29 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
       try {
         console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType);
         
-        // Convert buffer to base64 for Cloudinary upload
-        const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        console.log('[UPLOAD] Base64 data URI length:', fileBase64.length);
+        // Use upload_stream for buffer uploads (more reliable than base64 for PDFs)
+        const stream = Readable.from(req.file.buffer);
+        const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
         
-        const result = await cloudinary.uploader.upload(fileBase64, {
-          folder,
-          resource_type: resourceType,
-          public_id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-          use_filename: true,
-          unique_filename: true
+        const result = await new Promise<any>((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            {
+              folder,
+              resource_type: resourceType,
+              public_id: publicId,
+              use_filename: true,
+              unique_filename: true
+            },
+            (error, result) => {
+              if (error) {
+                reject(error);
+              } else {
+                resolve(result);
+              }
+            }
+          );
+          
+          stream.pipe(uploadStream);
         });
 
         console.log('[UPLOAD] Cloudinary upload success:', result.public_id);
