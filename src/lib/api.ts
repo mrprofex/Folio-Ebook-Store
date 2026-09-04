@@ -82,8 +82,10 @@ export async function apiRequest<T = any>(
 
     return data;
   } catch (err: any) {
-    if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-      const networkError: any = new Error('Network error: Unable to connect to the server. Please ensure the backend is running and DATABASE_URL is configured.');
+    // Only show network error for actual fetch failures (status 0)
+    // For HTTP errors (4xx, 5xx), the response.ok check above already threw with the actual error message
+    if (err.name === 'TypeError' && err.message === 'Failed to fetch' && !err.status) {
+      const networkError: any = new Error('Network error: Unable to connect to the server. Please check your internet connection.');
       networkError.status = 0;
       networkError.data = { error: 'NETWORK_ERROR', message: networkError.message };
       throw networkError;

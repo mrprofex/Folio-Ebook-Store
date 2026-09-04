@@ -41,14 +41,26 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     }
 
     console.log('[UPLOAD] File received:', req.file.originalname, req.file.mimetype, req.file.size);
+    
+    // Validate PDF files
+    const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
     const isImage = req.file.mimetype.startsWith('image/');
-    console.log('[UPLOAD] Is image:', isImage, 'Resource type:', isImage ? 'image' : 'raw');
+    
+    if (!isPdf && !isImage) {
+      console.log('[UPLOAD] Invalid file type:', req.file.mimetype);
+      return res.status(400).json({ 
+        error: 'INVALID_FILE_TYPE', 
+        message: 'Only PDF documents and images are allowed.' 
+      });
+    }
+
+    const resourceType = isImage ? 'image' : 'raw';
+    console.log('[UPLOAD] Is image:', isImage, 'Is PDF:', isPdf, 'Resource type:', resourceType);
 
     // If Cloudinary configured, upload to Cloudinary from memory buffer
     if (isCloudinaryConfigured) {
       try {
         const folder = isImage ? 'ebooks/covers' : 'ebooks/pdfs';
-        const resourceType = isImage ? 'image' : 'raw';
         
         console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType);
         
@@ -59,7 +71,9 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
         const result = await cloudinary.uploader.upload(fileBase64, {
           folder,
           resource_type: resourceType,
-          public_id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+          public_id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          use_filename: true,
+          unique_filename: true
         });
 
         console.log('[UPLOAD] Cloudinary upload success:', result.public_id);
@@ -74,9 +88,14 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
         console.error('[UPLOAD] Cloudinary upload error:', cloudErr.message);
         console.error('[UPLOAD] Cloudinary error code:', cloudErr.http_code || cloudErr.code || 'N/A');
         console.error('[UPLOAD] Cloudinary error details:', JSON.stringify(cloudErr, null, 2));
+        
+        // Return actual Cloudinary error details without exposing secrets
+        const errorMessage = cloudErr.message || 'Cloudinary upload failed';
+        const errorCode = cloudErr.http_code || cloudErr.code || 'UNKNOWN';
+        
         return res.status(500).json({ 
           error: 'CLOUDINARY_UPLOAD_FAILED', 
-          message: 'Failed to upload to Cloudinary. Please check Cloudinary configuration.' 
+          message: `Cloudinary upload failed (Error ${errorCode}): ${errorMessage}` 
         });
       }
     }
