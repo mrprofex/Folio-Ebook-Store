@@ -1,44 +1,13 @@
 import { Router } from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { v2 as cloudinary } from 'cloudinary';
 import { authMiddleware, adminMiddleware } from '../auth.js';
 
 const router = Router();
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
-const PDFS_DIR = path.join(UPLOADS_DIR, 'pdfs');
-
-try {
-  [UPLOADS_DIR, COVERS_DIR, PDFS_DIR].forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  });
-} catch (err) {
-  console.warn('Could not create upload directories (read-only filesystem?):', err);
-}
-
-// Configure Multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, COVERS_DIR);
-    } else {
-      cb(null, PDFS_DIR);
-    }
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-  }
-});
-
+// Use memory storage for Vercel serverless compatibility (read-only filesystem)
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
@@ -66,18 +35,20 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     }
 
     const isImage = req.file.mimetype.startsWith('image/');
-    const localRelativePath = isImage
-      ? `/uploads/covers/${req.file.filename}`
-      : `/uploads/pdfs/${req.file.filename}`;
 
-    // If Cloudinary configured, attempt upload to Cloudinary
+    // If Cloudinary configured, upload to Cloudinary from memory buffer
     if (isCloudinaryConfigured) {
       try {
         const folder = isImage ? 'ebooks/covers' : 'ebooks/pdfs';
         const resourceType = isImage ? 'image' : 'raw';
-        const result = await cloudinary.uploader.upload(req.file.path, {
+        
+        // Convert buffer to base64 for Cloudinary upload
+        const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        
+        const result = await cloudinary.uploader.upload(fileBase64, {
           folder,
-          resource_type: resourceType
+          resource_type: resourceType,
+          public_id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
         });
 
         return res.json({
@@ -88,17 +59,18 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
           filename: req.file.originalname
         });
       } catch (cloudErr) {
-        console.warn('Cloudinary upload fallback to local storage:', cloudErr);
+        console.error('Cloudinary upload error:', cloudErr);
+        return res.status(500).json({ 
+          error: 'CLOUDINARY_UPLOAD_FAILED', 
+          message: 'Failed to upload to Cloudinary. Please check Cloudinary configuration.' 
+        });
       }
     }
 
-    // Return local asset URL
-    return res.json({
-      url: localRelativePath,
-      publicId: req.file.filename,
-      resourceType: isImage ? 'image' : 'raw',
-      fileSize: `${(req.file.size / (1024 * 1024)).toFixed(2)} MB`,
-      filename: req.file.originalname
+    // Cloudinary is required for Vercel deployment (no local filesystem)
+    return res.status(500).json({ 
+      error: 'CLOUDINARY_NOT_CONFIGURED', 
+      message: 'Cloudinary is required for file uploads on Vercel. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.' 
     });
   } catch (err: any) {
     console.error('File upload error:', err);
