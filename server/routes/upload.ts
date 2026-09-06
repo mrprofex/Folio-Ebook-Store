@@ -2,6 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
+import http from 'http';
+import https from 'https';
 import { authMiddleware, adminMiddleware } from '../auth.js';
 
 const router = Router();
@@ -63,6 +65,52 @@ function extractCloudinaryError(cloudErr: any): { message: string; code: string;
   return { message, code: httpCode, httpCode, details };
 }
 
+async function withCloudinary403Capture<T>(uploadFn: () => Promise<T>): Promise<T> {
+  const originalHttpRequest = http.request;
+  const originalHttpsRequest = https.request;
+  let captured403Body: string | undefined;
+
+  http.request = function(requestOptions, callback) {
+    const req = originalHttpRequest.call(this, requestOptions, function(res) {
+      if (res.statusCode === 403) {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          captured403Body = Buffer.concat(chunks).toString();
+          console.log('[UPLOAD] Captured 403 response body (http):', captured403Body);
+        });
+      }
+      callback(res);
+    });
+    return req;
+  };
+
+  https.request = function(requestOptions, callback) {
+    const req = originalHttpsRequest.call(this, requestOptions, function(res) {
+      if (res.statusCode === 403) {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          captured403Body = Buffer.concat(chunks).toString();
+          console.log('[UPLOAD] Captured 403 response body (https):', captured403Body);
+        });
+      }
+      callback(res);
+    });
+    return req;
+  };
+
+  try {
+    return await uploadFn();
+  } finally {
+    http.request = originalHttpRequest;
+    https.request = originalHttpsRequest;
+    if (captured403Body) {
+      console.log('[UPLOAD] Final captured 403 body:', captured403Body);
+    }
+  }
+}
+
 // Upload endpoint (Admin only)
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
@@ -101,36 +149,38 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
       try {
         console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType);
 
-        // Use upload_stream for buffer uploads (more reliable than base64 for PDFs)
-        const stream = Readable.from(req.file.buffer);
-        const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const uploadResult = await withCloudinary403Capture(async () => {
+          // Use upload_stream for buffer uploads (more reliable than base64 for PDFs)
+          const stream = Readable.from(req.file.buffer);
+          const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-        const result = await new Promise<any>((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder,
-              resource_type: resourceType,
-              public_id: publicId,
-              use_filename: true,
-              unique_filename: true
-            },
-            (error, result) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve(result);
+          return await new Promise<any>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              {
+                folder,
+                resource_type: resourceType,
+                public_id: publicId,
+                use_filename: true,
+                unique_filename: true
+              },
+              (error, result) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(result);
+                }
               }
-            }
-          );
+            );
 
-          stream.pipe(uploadStream);
+            stream.pipe(uploadStream);
+          });
         });
 
-        console.log('[UPLOAD] Cloudinary upload success:', result.public_id);
+        console.log('[UPLOAD] Cloudinary upload success:', uploadResult.public_id);
         return res.json({
-          url: result.secure_url,
-          publicId: result.public_id,
-          resourceType: result.resource_type,
+          url: uploadResult.secure_url,
+          publicId: uploadResult.public_id,
+          resourceType: uploadResult.resource_type,
           fileSize: `${(req.file.size / (1024 * 1024)).toFixed(2)} MB`,
           filename: req.file.originalname
         });
@@ -211,6 +261,16 @@ router.get('/diagnostic', authMiddleware, adminMiddleware, async (req, res) => {
       if (authErr.response?.data) {
         diagnostics.authError.data = authErr.response.data;
       }
+    }
+
+    try {
+      const resourceTypes = await cloudinary.api.resource_types();
+      diagnostics.resourceTypes = resourceTypes;
+    } catch (rtErr: any) {
+      diagnostics.resourceTypesError = {
+        message: rtErr.message,
+        http_code: rtErr.http_code || 'N/A'
+      };
     }
 
     res.json(diagnostics);
