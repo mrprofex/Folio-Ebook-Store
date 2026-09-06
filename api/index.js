@@ -2987,12 +2987,41 @@ if (isCloudinaryConfigured) {
     api_secret: process.env.CLOUDINARY_API_SECRET
   });
 }
+var CLOUDINARY_SDK_VERSION = "2.11.0";
+function safeStringify(obj, maxLength = 1e3) {
+  try {
+    const str = JSON.stringify(obj);
+    return str.length > maxLength ? str.substring(0, maxLength) + "..." : str;
+  } catch (e) {
+    return "[Could not serialize object]";
+  }
+}
+function extractCloudinaryError(cloudErr) {
+  const httpCode = String(cloudErr.http_code || cloudErr.code || "UNKNOWN");
+  let message = cloudErr.message || "Cloudinary upload failed";
+  let details;
+  const responseData = cloudErr.response?.data;
+  if (responseData) {
+    const cloudinaryMessage = responseData?.error?.message;
+    const cloudinaryCode = responseData?.error?.code;
+    if (cloudinaryMessage) {
+      message = cloudinaryMessage;
+    }
+    details = safeStringify(responseData, 500);
+  }
+  const xCldError = cloudErr.response?.headers?.["x-cld-error"];
+  if (xCldError) {
+    details = details ? `${details} | X-Cld-Error: ${xCldError}` : `X-Cld-Error: ${xCldError}`;
+  }
+  return { message, code: httpCode, httpCode, details };
+}
 router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), async (req, res) => {
   try {
     console.log("[UPLOAD] Cloudinary configured:", isCloudinaryConfigured);
     console.log("[UPLOAD] CLOUDINARY_CLOUD_NAME exists:", Boolean(process.env.CLOUDINARY_CLOUD_NAME));
     console.log("[UPLOAD] CLOUDINARY_API_KEY exists:", Boolean(process.env.CLOUDINARY_API_KEY));
     console.log("[UPLOAD] CLOUDINARY_API_SECRET exists:", Boolean(process.env.CLOUDINARY_API_SECRET));
+    console.log("[UPLOAD] Cloudinary SDK:", CLOUDINARY_SDK_VERSION);
     if (!req.file) {
       return res.status(400).json({ error: "NO_FILE", message: "No file was uploaded" });
     }
@@ -3042,22 +3071,26 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
           filename: req.file.originalname
         });
       } catch (cloudErr) {
-        console.error("[UPLOAD] Cloudinary upload error:", cloudErr.message);
+        console.error("[UPLOAD] Cloudinary upload error keys:", Object.keys(cloudErr));
+        console.error("[UPLOAD] Cloudinary upload error message:", cloudErr.message);
         console.error("[UPLOAD] Cloudinary HTTP status:", cloudErr.http_code || "N/A");
         console.error("[UPLOAD] Cloudinary error code:", cloudErr.code || "N/A");
         console.error("[UPLOAD] Cloudinary error name:", cloudErr.name || "N/A");
         if (cloudErr.response) {
-          console.error("[UPLOAD] Cloudinary response body:", JSON.stringify(cloudErr.response, null, 2));
+          console.error("[UPLOAD] Cloudinary response headers:", safeStringify(cloudErr.response.headers, 500));
+          console.error("[UPLOAD] Cloudinary response data:", safeStringify(cloudErr.response.data, 1e3));
+        }
+        if (cloudErr.request) {
+          console.error("[UPLOAD] Cloudinary request method:", cloudErr.request.method);
+          console.error("[UPLOAD] Cloudinary request path:", cloudErr.request.path);
         }
         console.error("[UPLOAD] Upload params - resource_type:", resourceType, "folder:", folder);
         console.error("[UPLOAD] File mimetype:", req.file.mimetype, "size:", req.file.size);
-        const errorMessage = cloudErr.message || "Cloudinary upload failed";
-        const errorCode = cloudErr.http_code || cloudErr.code || "UNKNOWN";
-        const errorDetails = cloudErr.response ? JSON.stringify(cloudErr.response) : "";
+        const extracted = extractCloudinaryError(cloudErr);
         return res.status(500).json({
           error: "CLOUDINARY_UPLOAD_FAILED",
-          message: `Cloudinary upload failed (Error ${errorCode}): ${errorMessage}`,
-          details: errorDetails ? `Server response: ${errorDetails.substring(0, 200)}` : void 0
+          message: `Cloudinary upload failed (Error ${extracted.httpCode}): ${extracted.message}`,
+          details: extracted.details
         });
       }
     }
@@ -3069,6 +3102,44 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
   } catch (err) {
     console.error("[UPLOAD] File upload error:", err.message);
     return res.status(500).json({ error: "UPLOAD_FAILED", message: err.message || "File upload failed" });
+  }
+});
+router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const diagnostics = {
+      cloudinaryConfigured: isCloudinaryConfigured,
+      cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+      apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
+      apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
+      sdkVersion: CLOUDINARY_SDK_VERSION,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (!isCloudinaryConfigured) {
+      return res.json(diagnostics);
+    }
+    try {
+      const usage = await cloudinary.api.usage();
+      diagnostics.apiUsage = {
+        plan: usage.plan || "unknown",
+        uploads: usage.uploads || 0,
+        storage: usage.storage || 0,
+        bandwidth: usage.bandwidth || 0
+      };
+      diagnostics.authTest = "SUCCESS";
+    } catch (authErr) {
+      diagnostics.authTest = "FAILED";
+      diagnostics.authError = {
+        message: authErr.message,
+        http_code: authErr.http_code || "N/A",
+        code: authErr.code || "N/A"
+      };
+      if (authErr.response?.data) {
+        diagnostics.authError.data = authErr.response.data;
+      }
+    }
+    res.json(diagnostics);
+  } catch (err) {
+    res.status(500).json({ error: "DIAGNOSTIC_FAILED", message: err.message });
   }
 });
 var upload_default = router7;

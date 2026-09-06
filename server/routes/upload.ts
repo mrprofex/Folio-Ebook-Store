@@ -28,6 +28,41 @@ if (isCloudinaryConfigured) {
   });
 }
 
+const CLOUDINARY_SDK_VERSION = '2.11.0';
+
+function safeStringify(obj: any, maxLength = 1000): string {
+  try {
+    const str = JSON.stringify(obj);
+    return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
+  } catch (e) {
+    return '[Could not serialize object]';
+  }
+}
+
+function extractCloudinaryError(cloudErr: any): { message: string; code: string; httpCode: string; details?: string } {
+  const httpCode = String(cloudErr.http_code || cloudErr.code || 'UNKNOWN');
+  let message = cloudErr.message || 'Cloudinary upload failed';
+  let details: string | undefined;
+
+  // Cloudinary SDK v2 may wrap the raw HTTP response
+  const responseData = cloudErr.response?.data;
+  if (responseData) {
+    const cloudinaryMessage = responseData?.error?.message;
+    const cloudinaryCode = responseData?.error?.code;
+    if (cloudinaryMessage) {
+      message = cloudinaryMessage;
+    }
+    details = safeStringify(responseData, 500);
+  }
+
+  const xCldError = cloudErr.response?.headers?.['x-cld-error'];
+  if (xCldError) {
+    details = details ? `${details} | X-Cld-Error: ${xCldError}` : `X-Cld-Error: ${xCldError}`;
+  }
+
+  return { message, code: httpCode, httpCode, details };
+}
+
 // Upload endpoint (Admin only)
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
@@ -36,22 +71,23 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     console.log('[UPLOAD] CLOUDINARY_CLOUD_NAME exists:', Boolean(process.env.CLOUDINARY_CLOUD_NAME));
     console.log('[UPLOAD] CLOUDINARY_API_KEY exists:', Boolean(process.env.CLOUDINARY_API_KEY));
     console.log('[UPLOAD] CLOUDINARY_API_SECRET exists:', Boolean(process.env.CLOUDINARY_API_SECRET));
-    
+    console.log('[UPLOAD] Cloudinary SDK:', CLOUDINARY_SDK_VERSION);
+
     if (!req.file) {
       return res.status(400).json({ error: 'NO_FILE', message: 'No file was uploaded' });
     }
 
     console.log('[UPLOAD] File received:', req.file.originalname, req.file.mimetype, req.file.size);
-    
+
     // Validate PDF files
     const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
     const isImage = req.file.mimetype.startsWith('image/');
-    
+
     if (!isPdf && !isImage) {
       console.log('[UPLOAD] Invalid file type:', req.file.mimetype);
-      return res.status(400).json({ 
-        error: 'INVALID_FILE_TYPE', 
-        message: 'Only PDF documents and images are allowed.' 
+      return res.status(400).json({
+        error: 'INVALID_FILE_TYPE',
+        message: 'Only PDF documents and images are allowed.'
       });
     }
 
@@ -61,14 +97,14 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     // If Cloudinary configured, upload to Cloudinary from memory buffer
     if (isCloudinaryConfigured) {
       const folder = isImage ? 'ebooks/covers' : 'ebooks/pdfs';
-      
+
       try {
         console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType);
-        
+
         // Use upload_stream for buffer uploads (more reliable than base64 for PDFs)
         const stream = Readable.from(req.file.buffer);
         const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-        
+
         const result = await new Promise<any>((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
             {
@@ -86,7 +122,7 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
               }
             }
           );
-          
+
           stream.pipe(uploadStream);
         });
 
@@ -99,42 +135,87 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
           filename: req.file.originalname
         });
       } catch (cloudErr: any) {
-        console.error('[UPLOAD] Cloudinary upload error:', cloudErr.message);
+        console.error('[UPLOAD] Cloudinary upload error keys:', Object.keys(cloudErr));
+        console.error('[UPLOAD] Cloudinary upload error message:', cloudErr.message);
         console.error('[UPLOAD] Cloudinary HTTP status:', cloudErr.http_code || 'N/A');
         console.error('[UPLOAD] Cloudinary error code:', cloudErr.code || 'N/A');
         console.error('[UPLOAD] Cloudinary error name:', cloudErr.name || 'N/A');
-        
-        // Log safe response body details
+
         if (cloudErr.response) {
-          console.error('[UPLOAD] Cloudinary response body:', JSON.stringify(cloudErr.response, null, 2));
+          console.error('[UPLOAD] Cloudinary response headers:', safeStringify(cloudErr.response.headers, 500));
+          console.error('[UPLOAD] Cloudinary response data:', safeStringify(cloudErr.response.data, 1000));
         }
-        
-        // Log upload parameters that were used
+
+        if (cloudErr.request) {
+          console.error('[UPLOAD] Cloudinary request method:', cloudErr.request.method);
+          console.error('[UPLOAD] Cloudinary request path:', cloudErr.request.path);
+        }
+
         console.error('[UPLOAD] Upload params - resource_type:', resourceType, 'folder:', folder);
         console.error('[UPLOAD] File mimetype:', req.file.mimetype, 'size:', req.file.size);
-        
-        // Return actual Cloudinary error details without exposing secrets
-        const errorMessage = cloudErr.message || 'Cloudinary upload failed';
-        const errorCode = cloudErr.http_code || cloudErr.code || 'UNKNOWN';
-        const errorDetails = cloudErr.response ? JSON.stringify(cloudErr.response) : '';
-        
-        return res.status(500).json({ 
-          error: 'CLOUDINARY_UPLOAD_FAILED', 
-          message: `Cloudinary upload failed (Error ${errorCode}): ${errorMessage}`,
-          details: errorDetails ? `Server response: ${errorDetails.substring(0, 200)}` : undefined
+
+        const extracted = extractCloudinaryError(cloudErr);
+
+        return res.status(500).json({
+          error: 'CLOUDINARY_UPLOAD_FAILED',
+          message: `Cloudinary upload failed (Error ${extracted.httpCode}): ${extracted.message}`,
+          details: extracted.details
         });
       }
     }
 
     // Cloudinary is required for Vercel deployment (no local filesystem)
     console.log('[UPLOAD] Cloudinary not configured');
-    return res.status(500).json({ 
-      error: 'CLOUDINARY_NOT_CONFIGURED', 
-      message: 'Cloudinary is required for file uploads on Vercel. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.' 
+    return res.status(500).json({
+      error: 'CLOUDINARY_NOT_CONFIGURED',
+      message: 'Cloudinary is required for file uploads on Vercel. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.'
     });
   } catch (err: any) {
     console.error('[UPLOAD] File upload error:', err.message);
     return res.status(500).json({ error: 'UPLOAD_FAILED', message: err.message || 'File upload failed' });
+  }
+});
+
+// Protected diagnostic endpoint (Admin only)
+router.get('/diagnostic', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const diagnostics: any = {
+      cloudinaryConfigured: isCloudinaryConfigured,
+      cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+      apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
+      apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
+      sdkVersion: CLOUDINARY_SDK_VERSION,
+      timestamp: new Date().toISOString()
+    };
+
+    if (!isCloudinaryConfigured) {
+      return res.json(diagnostics);
+    }
+
+    try {
+      const usage = await cloudinary.api.usage();
+      diagnostics.apiUsage = {
+        plan: usage.plan || 'unknown',
+        uploads: usage.uploads || 0,
+        storage: usage.storage || 0,
+        bandwidth: usage.bandwidth || 0
+      };
+      diagnostics.authTest = 'SUCCESS';
+    } catch (authErr: any) {
+      diagnostics.authTest = 'FAILED';
+      diagnostics.authError = {
+        message: authErr.message,
+        http_code: authErr.http_code || 'N/A',
+        code: authErr.code || 'N/A'
+      };
+      if (authErr.response?.data) {
+        diagnostics.authError.data = authErr.response.data;
+      }
+    }
+
+    res.json(diagnostics);
+  } catch (err: any) {
+    res.status(500).json({ error: 'DIAGNOSTIC_FAILED', message: err.message });
   }
 });
 
