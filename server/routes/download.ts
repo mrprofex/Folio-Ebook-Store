@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import { db } from '../db.js';
 import { authMiddleware, AuthRequest } from '../auth.js';
 
@@ -161,6 +162,31 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
         }
       }
 
+      if (targetPdfUrl && (targetPdfUrl.startsWith('http://') || targetPdfUrl.startsWith('https://'))) {
+        try {
+          const externalRes = await fetch(targetPdfUrl);
+          if (!externalRes.ok) {
+            throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+          }
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="${safeItemFileName}"`);
+          const contentLength = externalRes.headers.get('content-length');
+          if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+          }
+          const webStream = externalRes.body;
+          if (webStream) {
+            const nodeStream = Readable.fromWeb(webStream as any);
+            nodeStream.pipe(res);
+          } else {
+            res.status(500).send('Empty PDF stream');
+          }
+          return;
+        } catch (err) {
+          console.error('Error fetching external PDF for combo item:', err);
+        }
+      }
+
       const itemBuffer = generateEditorialPdfBuffer(
         {
           title: item.title,
@@ -228,6 +254,31 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
         }
       }
 
+      if (targetPdfUrl && (targetPdfUrl.startsWith('http://') || targetPdfUrl.startsWith('https://'))) {
+        try {
+          const externalRes = await fetch(targetPdfUrl);
+          if (!externalRes.ok) {
+            throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+          }
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="${safeBonusFileName}"`);
+          const contentLength = externalRes.headers.get('content-length');
+          if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+          }
+          const webStream = externalRes.body;
+          if (webStream) {
+            const nodeStream = Readable.fromWeb(webStream as any);
+            nodeStream.pipe(res);
+          } else {
+            res.status(500).send('Empty PDF stream');
+          }
+          return;
+        } catch (err) {
+          console.error('Error fetching external PDF for bonus item:', err);
+        }
+      }
+
       const bonusBuffer = generateEditorialPdfBuffer(
         {
           title: `[BONUS COMPANION] ${bonusTitle}`,
@@ -259,6 +310,31 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
         return fs.createReadStream(localFilePath).pipe(res);
+      }
+    }
+
+    if (ebook.pdfUrl && (ebook.pdfUrl.startsWith('http://') || ebook.pdfUrl.startsWith('https://'))) {
+      try {
+        const externalRes = await fetch(ebook.pdfUrl);
+        if (!externalRes.ok) {
+          throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+        const contentLength = externalRes.headers.get('content-length');
+        if (contentLength) {
+          res.setHeader('Content-Length', contentLength);
+        }
+        const webStream = externalRes.body;
+        if (webStream) {
+          const nodeStream = Readable.fromWeb(webStream as any);
+          nodeStream.pipe(res);
+        } else {
+          res.status(500).send('Empty PDF stream');
+        }
+        return;
+      } catch (err) {
+        console.error('Error fetching external PDF for main ebook:', err);
       }
     }
 
