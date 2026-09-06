@@ -2970,7 +2970,6 @@ var admin_default = router6;
 import { Router as Router7 } from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
-import { Readable as Readable2 } from "stream";
 import http from "http";
 import https from "https";
 var router7 = Router7();
@@ -3059,6 +3058,88 @@ async function withCloudinary403Capture(uploadFn) {
     }
   }
 }
+async function uploadToCloudinaryUnsigned(buffer, options) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) {
+    throw new Error("Cloudinary cloud name is not configured");
+  }
+  const boundary = `----FormBoundary${Math.random().toString(36).substring(2, 20)}`;
+  const uploadPath = `/${options.resource_type}/upload`;
+  const apiUrl = new URL(`https://api.cloudinary.com/v1_1/${cloudName}${uploadPath}`);
+  const params = new URLSearchParams();
+  params.append("folder", options.folder);
+  params.append("resource_type", options.resource_type);
+  params.append("upload_preset", options.upload_preset);
+  params.append("unsigned", "true");
+  params.append("public_id", options.public_id);
+  params.append("use_filename", "true");
+  params.append("unique_filename", "true");
+  params.append("timestamp", String(Math.floor(Date.now() / 1e3)));
+  const parts = [];
+  for (const [key, value] of params.entries()) {
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r
+Content-Disposition: form-data; name="${key}"\r
+\r
+${value}\r
+`,
+        "utf8"
+      )
+    );
+  }
+  const fileHeader = Buffer.from(
+    `--${boundary}\r
+Content-Disposition: form-data; name="file"\r
+Content-Type: application/octet-stream\r
+\r
+`,
+    "binary"
+  );
+  parts.push(fileHeader);
+  parts.push(buffer);
+  parts.push(Buffer.from(`\r
+--${boundary}--\r
+`));
+  const body = Buffer.concat(parts);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: apiUrl.hostname,
+        path: apiUrl.pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length
+        }
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const responseBody = Buffer.concat(chunks).toString();
+          try {
+            const result = JSON.parse(responseBody);
+            if (res.statusCode !== 200 || result.error) {
+              const error = new Error(result.error?.message || `HTTP ${res.statusCode}`);
+              error.http_code = res.statusCode;
+              error.response = { data: result };
+              return reject(error);
+            }
+            resolve(result);
+          } catch (e) {
+            reject(new Error(`Invalid JSON response: ${responseBody}`));
+          }
+        });
+      }
+    );
+    req.on("error", (err) => {
+      reject(err);
+    });
+    req.write(body);
+    req.end();
+  });
+}
 router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), async (req, res) => {
   try {
     console.log("[UPLOAD] Cloudinary configured:", isCloudinaryConfigured);
@@ -3093,28 +3174,12 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
     try {
       console.log("[UPLOAD] Uploading to Cloudinary - folder:", folder, "resource_type:", resourceType, "upload_preset:", UPLOAD_PRESET);
       const uploadResult = await withCloudinary403Capture(async () => {
-        const stream = Readable2.from(req.file.buffer);
         const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-        return await new Promise((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder,
-              resource_type: resourceType,
-              upload_preset: UPLOAD_PRESET,
-              unsigned: true,
-              public_id: publicId,
-              use_filename: true,
-              unique_filename: true
-            },
-            (error, result) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve(result);
-              }
-            }
-          );
-          stream.pipe(uploadStream);
+        return await uploadToCloudinaryUnsigned(req.file.buffer, {
+          folder,
+          resource_type: resourceType,
+          upload_preset: UPLOAD_PRESET,
+          public_id: publicId
         });
       });
       console.log("[UPLOAD] Cloudinary upload success:", uploadResult.public_id);
@@ -3134,10 +3199,6 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
       if (cloudErr.response) {
         console.error("[UPLOAD] Cloudinary response headers:", safeStringify(cloudErr.response.headers, 500));
         console.error("[UPLOAD] Cloudinary response data:", safeStringify(cloudErr.response.data, 1e3));
-      }
-      if (cloudErr.request) {
-        console.error("[UPLOAD] Cloudinary request method:", cloudErr.request.method);
-        console.error("[UPLOAD] Cloudinary request path:", cloudErr.request.path);
       }
       console.error("[UPLOAD] Upload params - resource_type:", resourceType, "folder:", folder, "upload_preset:", UPLOAD_PRESET);
       console.error("[UPLOAD] File mimetype:", req.file.mimetype, "size:", req.file.size);
