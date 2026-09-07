@@ -1,8 +1,47 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../auth.js';
+import { v2 as cloudinary } from 'cloudinary';
 
 const router = Router();
+
+// Initialize Cloudinary for delete operations (uses signed credentials)
+const isCloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET &&
+  !process.env.CLOUDINARY_CLOUD_NAME.includes('sample')
+);
+
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
+
+async function destroyCloudinaryAsset(publicId: string | undefined | null, resourceType: string | undefined | null): Promise<void> {
+  if (!publicId || !resourceType || !isCloudinaryConfigured) {
+    return;
+  }
+  try {
+    console.log('[ADMIN] Deleting Cloudinary asset:', publicId, 'resource_type:', resourceType);
+    const result = await new Promise<any>((resolve, reject) => {
+      cloudinary.uploader.destroy(
+        publicId,
+        { resource_type: resourceType },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+    });
+    console.log('[ADMIN] Cloudinary delete result:', result);
+  } catch (err: any) {
+    console.error('[ADMIN] Cloudinary delete error:', err.message);
+  }
+}
 
 // Apply auth + admin guard to all admin routes
 router.use(authMiddleware as any);
@@ -357,6 +396,25 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
     if (updates.publicationType) {
       updates.publicationType = updates.publicationType === 'COMBO' ? 'COMBO' : 'SINGLE';
     }
+
+    // Preserve existing Cloudinary metadata if not explicitly replaced
+    if (!updates.coverPublicId && existing.coverPublicId) {
+      updates.coverPublicId = existing.coverPublicId;
+    }
+    if (!updates.pdfPublicId && existing.pdfPublicId) {
+      updates.pdfPublicId = existing.pdfPublicId;
+    }
+    if (!updates.cloudinaryResourceType && existing.cloudinaryResourceType) {
+      updates.cloudinaryResourceType = existing.cloudinaryResourceType;
+    }
+
+    // Preserve existing URLs if not replaced
+    if (!updates.coverImageUrl && existing.coverImageUrl) {
+      updates.coverImageUrl = existing.coverImageUrl;
+    }
+    if (!updates.pdfUrl && existing.pdfUrl) {
+      updates.pdfUrl = existing.pdfUrl;
+    }
     if (Array.isArray(updates.comboItems)) {
       const cleanComboItems: any[] = [];
       for (let idx = 0; idx < updates.comboItems.length; idx++) {
@@ -531,6 +589,24 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
 
     const updated = await db.updateEbook(id, updates);
 
+    // Clean up old Cloudinary assets if media was replaced
+    try {
+      const assetsToDelete: { publicId: string; resourceType: string }[] = [];
+      
+      if (updates.coverImageUrl && updates.coverImageUrl !== existing.coverImageUrl && existing.coverPublicId && existing.cloudinaryResourceType) {
+        assetsToDelete.push({ publicId: existing.coverPublicId, resourceType: existing.cloudinaryResourceType });
+      }
+      if (updates.pdfUrl && updates.pdfUrl !== existing.pdfUrl && existing.pdfPublicId) {
+        assetsToDelete.push({ publicId: existing.pdfPublicId, resourceType: 'raw' });
+      }
+
+      for (const asset of assetsToDelete) {
+        await destroyCloudinaryAsset(asset.publicId, asset.resourceType);
+      }
+    } catch (cleanupErr) {
+      console.error('[ADMIN] Cloudinary cleanup error during update:', cleanupErr);
+    }
+
     // Inline coupon update or creation if specified
     if (req.body.enableCoupon && req.body.couponCode && req.body.couponDiscountPercentage) {
       const formattedCode = String(req.body.couponCode).toUpperCase().trim();
@@ -574,12 +650,33 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
 router.delete('/ebooks/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const existing = await db.findEbookById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: 'Ebook not found' });
+    }
+
+    // Clean up Cloudinary assets before deleting DB record
+    const assetsToDelete: { publicId: string; resourceType: string }[] = [];
+    if (existing.coverPublicId && existing.cloudinaryResourceType) {
+      assetsToDelete.push({ publicId: existing.coverPublicId, resourceType: existing.cloudinaryResourceType });
+    }
+    if (existing.pdfPublicId) {
+      assetsToDelete.push({ publicId: existing.pdfPublicId, resourceType: 'raw' });
+    }
+
     const deleted = await db.deleteEbook(id);
     if (!deleted) {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'Ebook not found' });
     }
+
+    // Delete Cloudinary assets after DB deletion (best effort)
+    for (const asset of assetsToDelete) {
+      await destroyCloudinaryAsset(asset.publicId, asset.resourceType);
+    }
+
     return res.json({ success: true, message: 'Ebook deleted successfully' });
   } catch (err: any) {
+    console.error('Delete ebook error:', err);
     return res.status(500).json({ error: 'SERVER_ERROR', message: 'Failed to delete ebook' });
   }
 });

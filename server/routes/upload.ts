@@ -342,4 +342,56 @@ router.get('/diagnostic', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
+// Delete a Cloudinary asset by public_id (Admin only)
+router.delete('/file', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { publicId, resourceType } = req.body;
+
+    if (!publicId || !resourceType) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'publicId and resourceType are required to delete a Cloudinary asset'
+      });
+    }
+
+    if (!isCloudinaryConfigured) {
+      return res.status(500).json({
+        error: 'CLOUDINARY_NOT_CONFIGURED',
+        message: 'Cloudinary is not configured on this server'
+      });
+    }
+
+    console.log('[UPLOAD] Deleting Cloudinary asset:', publicId, 'resource_type:', resourceType);
+
+    const result = await new Promise<any>((resolve, reject) => {
+      cloudinary.uploader.destroy(
+        publicId,
+        { resource_type: resourceType },
+        (error, result) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+      );
+    });
+
+    console.log('[UPLOAD] Cloudinary delete result:', result);
+    return res.json({
+      success: true,
+      result,
+      message: result.result === 'ok' ? 'Asset deleted successfully' : `Cloudinary returned: ${result.result}`
+    });
+  } catch (cloudErr: any) {
+    console.error('[UPLOAD] Cloudinary delete error:', cloudErr.message);
+    const extracted = extractCloudinaryError(cloudErr);
+    return res.status(500).json({
+      error: 'CLOUDINARY_DELETE_FAILED',
+      message: `Cloudinary delete failed (Error ${extracted.httpCode}): ${extracted.message}`,
+      details: extracted.details
+    });
+  }
+});
+
 export default router;

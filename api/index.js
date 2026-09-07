@@ -2152,7 +2152,39 @@ var user_default = router5;
 
 // server/routes/admin.ts
 import { Router as Router6 } from "express";
+import { v2 as cloudinary } from "cloudinary";
 var router6 = Router6();
+var isCloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET && !process.env.CLOUDINARY_CLOUD_NAME.includes("sample")
+);
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
+async function destroyCloudinaryAsset(publicId, resourceType) {
+  if (!publicId || !resourceType || !isCloudinaryConfigured) {
+    return;
+  }
+  try {
+    console.log("[ADMIN] Deleting Cloudinary asset:", publicId, "resource_type:", resourceType);
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.destroy(
+        publicId,
+        { resource_type: resourceType },
+        (error, result2) => {
+          if (error) reject(error);
+          else resolve(result2);
+        }
+      );
+    });
+    console.log("[ADMIN] Cloudinary delete result:", result);
+  } catch (err) {
+    console.error("[ADMIN] Cloudinary delete error:", err.message);
+  }
+}
 router6.use(authMiddleware);
 router6.use(adminMiddleware);
 function slugify(text) {
@@ -2470,6 +2502,21 @@ router6.put("/ebooks/:id", async (req, res) => {
     if (updates.publicationType) {
       updates.publicationType = updates.publicationType === "COMBO" ? "COMBO" : "SINGLE";
     }
+    if (!updates.coverPublicId && existing.coverPublicId) {
+      updates.coverPublicId = existing.coverPublicId;
+    }
+    if (!updates.pdfPublicId && existing.pdfPublicId) {
+      updates.pdfPublicId = existing.pdfPublicId;
+    }
+    if (!updates.cloudinaryResourceType && existing.cloudinaryResourceType) {
+      updates.cloudinaryResourceType = existing.cloudinaryResourceType;
+    }
+    if (!updates.coverImageUrl && existing.coverImageUrl) {
+      updates.coverImageUrl = existing.coverImageUrl;
+    }
+    if (!updates.pdfUrl && existing.pdfUrl) {
+      updates.pdfUrl = existing.pdfUrl;
+    }
     if (Array.isArray(updates.comboItems)) {
       const cleanComboItems = [];
       for (let idx = 0; idx < updates.comboItems.length; idx++) {
@@ -2638,6 +2685,20 @@ router6.put("/ebooks/:id", async (req, res) => {
       }
     }
     const updated = await db.updateEbook(id, updates);
+    try {
+      const assetsToDelete = [];
+      if (updates.coverImageUrl && updates.coverImageUrl !== existing.coverImageUrl && existing.coverPublicId && existing.cloudinaryResourceType) {
+        assetsToDelete.push({ publicId: existing.coverPublicId, resourceType: existing.cloudinaryResourceType });
+      }
+      if (updates.pdfUrl && updates.pdfUrl !== existing.pdfUrl && existing.pdfPublicId) {
+        assetsToDelete.push({ publicId: existing.pdfPublicId, resourceType: "raw" });
+      }
+      for (const asset of assetsToDelete) {
+        await destroyCloudinaryAsset(asset.publicId, asset.resourceType);
+      }
+    } catch (cleanupErr) {
+      console.error("[ADMIN] Cloudinary cleanup error during update:", cleanupErr);
+    }
     if (req.body.enableCoupon && req.body.couponCode && req.body.couponDiscountPercentage) {
       const formattedCode = String(req.body.couponCode).toUpperCase().trim();
       const existingCoupons = await db.getCouponsByEbookId(id);
@@ -2677,12 +2738,27 @@ router6.put("/ebooks/:id", async (req, res) => {
 router6.delete("/ebooks/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await db.findEbookById(id);
+    if (!existing) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Ebook not found" });
+    }
+    const assetsToDelete = [];
+    if (existing.coverPublicId && existing.cloudinaryResourceType) {
+      assetsToDelete.push({ publicId: existing.coverPublicId, resourceType: existing.cloudinaryResourceType });
+    }
+    if (existing.pdfPublicId) {
+      assetsToDelete.push({ publicId: existing.pdfPublicId, resourceType: "raw" });
+    }
     const deleted = await db.deleteEbook(id);
     if (!deleted) {
       return res.status(404).json({ error: "NOT_FOUND", message: "Ebook not found" });
     }
+    for (const asset of assetsToDelete) {
+      await destroyCloudinaryAsset(asset.publicId, asset.resourceType);
+    }
     return res.json({ success: true, message: "Ebook deleted successfully" });
   } catch (err) {
+    console.error("Delete ebook error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Failed to delete ebook" });
   }
 });
@@ -2969,7 +3045,7 @@ var admin_default = router6;
 // server/routes/upload.ts
 import { Router as Router7 } from "express";
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
+import { v2 as cloudinary2 } from "cloudinary";
 import http from "http";
 import https from "https";
 var router7 = Router7();
@@ -2978,11 +3054,11 @@ var upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }
   // 50MB
 });
-var isCloudinaryConfigured = Boolean(
+var isCloudinaryConfigured2 = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME && !process.env.CLOUDINARY_CLOUD_NAME.includes("sample")
 );
-if (isCloudinaryConfigured) {
-  cloudinary.config({
+if (isCloudinaryConfigured2) {
+  cloudinary2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
@@ -3142,7 +3218,7 @@ Content-Type: application/octet-stream\r
 }
 router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), async (req, res) => {
   try {
-    console.log("[UPLOAD] Cloudinary configured:", isCloudinaryConfigured);
+    console.log("[UPLOAD] Cloudinary configured:", isCloudinaryConfigured2);
     console.log("[UPLOAD] CLOUDINARY_CLOUD_NAME exists:", Boolean(process.env.CLOUDINARY_CLOUD_NAME));
     console.log("[UPLOAD] CLOUDINARY_API_KEY exists:", Boolean(process.env.CLOUDINARY_API_KEY));
     console.log("[UPLOAD] CLOUDINARY_API_SECRET exists:", Boolean(process.env.CLOUDINARY_API_SECRET));
@@ -3164,7 +3240,7 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
     const resourceType = isImage ? "image" : "raw";
     const folder = isImage ? "ebooks/covers" : "ebooks";
     console.log("[UPLOAD] Is image:", isImage, "Is PDF:", isPdf, "Resource type:", resourceType, "Folder:", folder);
-    if (!isCloudinaryConfigured) {
+    if (!isCloudinaryConfigured2) {
       console.log("[UPLOAD] Cloudinary not configured");
       return res.status(500).json({
         error: "CLOUDINARY_NOT_CONFIGURED",
@@ -3217,7 +3293,7 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
 router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const diagnostics = {
-      cloudinaryConfigured: isCloudinaryConfigured,
+      cloudinaryConfigured: isCloudinaryConfigured2,
       cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
       apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
       apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
@@ -3225,11 +3301,11 @@ router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => 
       sdkVersion: CLOUDINARY_SDK_VERSION,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (!isCloudinaryConfigured) {
+    if (!isCloudinaryConfigured2) {
       return res.json(diagnostics);
     }
     try {
-      const usage = await cloudinary.api.usage();
+      const usage = await cloudinary2.api.usage();
       diagnostics.apiUsage = {
         plan: usage.plan || "unknown",
         uploads: usage.uploads || 0,
@@ -3249,7 +3325,7 @@ router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => 
       }
     }
     try {
-      const resourceTypes = await cloudinary.api.resource_types();
+      const resourceTypes = await cloudinary2.api.resource_types();
       diagnostics.resourceTypes = resourceTypes;
     } catch (rtErr) {
       diagnostics.resourceTypesError = {
@@ -3260,6 +3336,51 @@ router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => 
     res.json(diagnostics);
   } catch (err) {
     res.status(500).json({ error: "DIAGNOSTIC_FAILED", message: err.message });
+  }
+});
+router7.delete("/file", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { publicId, resourceType } = req.body;
+    if (!publicId || !resourceType) {
+      return res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "publicId and resourceType are required to delete a Cloudinary asset"
+      });
+    }
+    if (!isCloudinaryConfigured2) {
+      return res.status(500).json({
+        error: "CLOUDINARY_NOT_CONFIGURED",
+        message: "Cloudinary is not configured on this server"
+      });
+    }
+    console.log("[UPLOAD] Deleting Cloudinary asset:", publicId, "resource_type:", resourceType);
+    const result = await new Promise((resolve, reject) => {
+      cloudinary2.uploader.destroy(
+        publicId,
+        { resource_type: resourceType },
+        (error, result2) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result2);
+          }
+        }
+      );
+    });
+    console.log("[UPLOAD] Cloudinary delete result:", result);
+    return res.json({
+      success: true,
+      result,
+      message: result.result === "ok" ? "Asset deleted successfully" : `Cloudinary returned: ${result.result}`
+    });
+  } catch (cloudErr) {
+    console.error("[UPLOAD] Cloudinary delete error:", cloudErr.message);
+    const extracted = extractCloudinaryError(cloudErr);
+    return res.status(500).json({
+      error: "CLOUDINARY_DELETE_FAILED",
+      message: `Cloudinary delete failed (Error ${extracted.httpCode}): ${extracted.message}`,
+      details: extracted.details
+    });
   }
 });
 var upload_default = router7;

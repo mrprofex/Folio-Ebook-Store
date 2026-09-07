@@ -66,7 +66,10 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
   const [pageCount, setPageCount] = useState('240');
   const [fileSize, setFileSize] = useState('12.4 MB');
   const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [coverPublicId, setCoverPublicId] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
+  const [pdfPublicId, setPdfPublicId] = useState('');
+  const [cloudinaryResourceType, setCloudinaryResourceType] = useState('');
   const [sampleChapter, setSampleChapter] = useState('');
   const [featured, setFeatured] = useState(false);
   const [published, setPublished] = useState(true);
@@ -153,7 +156,10 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setPageCount(targetEbook.pageCount ? targetEbook.pageCount.toString() : '240');
       setFileSize(targetEbook.fileSize || '12.4 MB');
       setCoverImageUrl(targetEbook.coverImageUrl || '');
+      setCoverPublicId(targetEbook.coverPublicId || '');
       setPdfUrl(targetEbook.pdfUrl || '');
+      setPdfPublicId(targetEbook.pdfPublicId || '');
+      setCloudinaryResourceType(targetEbook.cloudinaryResourceType || '');
       setSampleChapter(targetEbook.sampleChapter || '');
       setFeatured(Boolean(targetEbook.featured));
       setPublished(targetEbook.published !== undefined ? Boolean(targetEbook.published) : true);
@@ -249,7 +255,10 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setPageCount('220');
       setFileSize('10.5 MB');
       setCoverImageUrl('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80');
+      setCoverPublicId('');
       setPdfUrl('');
+      setPdfPublicId('');
+      setCloudinaryResourceType('');
       setSampleChapter('Chapter 1: The Foundation of Modern Systems. In this comprehensive guide...');
       setFeatured(false);
       setPublished(true);
@@ -290,6 +299,8 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
     try {
       const res = await uploadFile(file);
       setCoverImageUrl(res.url);
+      setCoverPublicId(res.publicId || '');
+      setCloudinaryResourceType(res.resourceType || 'image');
     } catch (err: any) {
       setError(err.message || 'Failed to upload cover image');
     } finally {
@@ -309,6 +320,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
     try {
       const res = await uploadFile(file);
       setPdfUrl(res.url);
+      setPdfPublicId(res.publicId || '');
       setFileSize(res.fileSize);
     } catch (err: any) {
       setError(err.message || 'Failed to upload PDF file to Cloudinary');
@@ -695,7 +707,10 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
         pageCount: Number(pageCount),
         fileSize,
         coverImageUrl: coverImageUrl.trim(),
+        coverPublicId: coverPublicId.trim() || undefined,
         pdfUrl: pdfUrl.trim() || undefined,
+        pdfPublicId: pdfPublicId.trim() || undefined,
+        cloudinaryResourceType: cloudinaryResourceType.trim() || undefined,
         sampleChapter: sampleChapter.trim(),
         featured,
         published,
