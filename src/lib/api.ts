@@ -97,7 +97,7 @@ export async function apiRequest<T = any>(
   }
 }
 
-export async function uploadFile(file: File): Promise<{ url: string; publicId?: string; fileSize: string; filename: string }> {
+export async function uploadFile(file: File): Promise<{ url: string; publicId?: string; resourceType?: string; fileSize: string; filename: string }> {
   const formData = new FormData();
   formData.append('file', file);
   return apiRequest('/api/upload/file', {
