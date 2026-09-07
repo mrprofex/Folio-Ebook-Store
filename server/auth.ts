@@ -46,9 +46,17 @@ export async function verifyGoogleIdToken(idToken: string): Promise<{ email: str
   }
 
   try {
-    const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
     if (!resp.ok) {
-      console.error('Google tokeninfo request failed:', resp.status, resp.statusText);
+      const errorBody = await resp.text();
+      console.error('Google tokeninfo request failed:', resp.status, resp.statusText, errorBody);
       return null;
     }
     const payload: any = await resp.json();
@@ -75,8 +83,12 @@ export async function verifyGoogleIdToken(idToken: string): Promise<{ email: str
     }
 
     return { email: payload.email, name: payload.name };
-  } catch (err) {
-    console.error('Google token verification error:', err);
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      console.error('Google token verification timed out after 10 seconds');
+    } else {
+      console.error('Google token verification error:', err);
+    }
     return null;
   }
 }

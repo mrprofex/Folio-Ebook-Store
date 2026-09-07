@@ -1208,9 +1208,15 @@ async function verifyGoogleIdToken(idToken) {
     return null;
   }
   try {
-    const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1e4);
+    const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
     if (!resp.ok) {
-      console.error("Google tokeninfo request failed:", resp.status, resp.statusText);
+      const errorBody = await resp.text();
+      console.error("Google tokeninfo request failed:", resp.status, resp.statusText, errorBody);
       return null;
     }
     const payload = await resp.json();
@@ -1236,7 +1242,11 @@ async function verifyGoogleIdToken(idToken) {
     }
     return { email: payload.email, name: payload.name };
   } catch (err) {
-    console.error("Google token verification error:", err);
+    if (err.name === "AbortError") {
+      console.error("Google token verification timed out after 10 seconds");
+    } else {
+      console.error("Google token verification error:", err);
+    }
     return null;
   }
 }
@@ -1307,6 +1317,38 @@ if (!ADMIN_PASSWORD) {
 if (ADMIN_EMAIL && ADMIN_PASSWORD) {
   console.log("[auth] Admin credentials configured for:", ADMIN_EMAIL);
 }
+router.get("/diagnostic", async (req, res) => {
+  try {
+    const diagnostics = {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      environment: {
+        adminEmailConfigured: Boolean(ADMIN_EMAIL),
+        adminPasswordConfigured: Boolean(ADMIN_PASSWORD),
+        googleClientIdConfigured: Boolean(process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID),
+        authSecretConfigured: Boolean(process.env.AUTH_SECRET || process.env.JWT_SECRET),
+        databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
+        nodeEnv: process.env.NODE_ENV || "development",
+        vercel: process.env.VERCEL === "1"
+      },
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID ? "configured" : "missing"
+      },
+      database: {
+        connected: false
+      }
+    };
+    try {
+      await db.findUserById("diagnostic-test");
+      diagnostics.database.connected = true;
+    } catch (dbErr) {
+      diagnostics.database.error = dbErr.message;
+      diagnostics.database.code = dbErr.code;
+    }
+    res.json(diagnostics);
+  } catch (err) {
+    res.status(500).json({ error: "DIAGNOSTIC_FAILED", message: err.message });
+  }
+});
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
@@ -1347,15 +1389,19 @@ router.post("/google", async (req, res) => {
     if (!idToken) {
       return res.status(400).json({ error: "VALIDATION_ERROR", message: "Google authentication token is missing" });
     }
+    console.log("[auth/google] Attempting Google login. Client ID configured:", Boolean(process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID));
     const payload = await verifyGoogleIdToken(idToken);
     if (!payload || !payload.email) {
-      return res.status(401).json({ error: "INVALID_GOOGLE_TOKEN", message: "Could not verify your Google account" });
+      console.error("[auth/google] Google token verification failed. Check GOOGLE_CLIENT_ID in Vercel environment variables.");
+      return res.status(401).json({ error: "INVALID_GOOGLE_TOKEN", message: "Could not verify your Google account. Please ensure Google OAuth is configured correctly." });
     }
     const email = payload.email.toLowerCase().trim();
     const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
     const name = (payload.name || email.split("@")[0]).trim();
+    console.log("[auth/google] Google token verified for email:", email);
     let user = await db.findUserByEmail(email);
     if (email === adminEmail || user?.role === "ADMIN") {
+      console.log("[auth/google] Admin account attempted Google login:", email);
       return res.status(403).json({
         error: "ADMIN_GOOGLE_LOGIN_DISABLED",
         message: "Administrator accounts must sign in with email and password from the admin login page."
@@ -1363,6 +1409,7 @@ router.post("/google", async (req, res) => {
     }
     if (!user) {
       const randomHash = hashPassword(`${Math.random().toString(36).slice(2)}${Date.now()}`);
+      console.log("[auth/google] Creating new user for email:", email);
       const created = await db.createUser({
         name,
         email,
@@ -1370,33 +1417,44 @@ router.post("/google", async (req, res) => {
         role: "USER"
       });
       user = created;
+    } else {
+      console.log("[auth/google] Existing user logged in via Google:", email);
     }
     await db.updateUser(user.id, { lastLoginAt: (/* @__PURE__ */ new Date()).toISOString() });
     const safeUser = await db.findUserById(user.id);
     if (!safeUser) {
+      console.error("[auth/google] User retrieval failed after Google login for:", email);
       return res.status(500).json({ error: "SERVER_ERROR", message: "User retrieval failed" });
     }
     const token = generateToken(safeUser);
+    console.log("[auth/google] Google login successful for:", email);
     return res.json({ token, user: safeUser });
   } catch (err) {
-    console.error("Google login error:", err);
-    return res.status(401).json({ error: "GOOGLE_AUTH_FAILED", message: "Google sign-in failed. Please try again." });
+    console.error("[auth/google] Google login error:", err);
+    const errorMessage = err.message || "Google sign-in failed. Please try again.";
+    return res.status(401).json({ error: "GOOGLE_AUTH_FAILED", message: errorMessage });
   }
 });
 router.post("/admin-login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log("[auth/admin-login] Attempt. ADMIN_EMAIL configured:", Boolean(ADMIN_EMAIL), "ADMIN_PASSWORD configured:", Boolean(ADMIN_PASSWORD));
     if (!ADMIN_EMAIL || !ADMIN_PASSWORD_HASH) {
-      return res.status(500).json({ error: "SERVER_ERROR", message: "Admin authentication is not configured on the server." });
+      console.error("[auth/admin-login] Admin credentials not configured in environment variables.");
+      return res.status(500).json({ error: "SERVER_ERROR", message: "Admin authentication is not configured on the server. Contact support." });
     }
     if (!email || !password) {
       return res.status(400).json({ error: "VALIDATION_ERROR", message: "Email and password are required" });
     }
-    if (email.toLowerCase().trim() !== ADMIN_EMAIL || !comparePassword(password, ADMIN_PASSWORD_HASH)) {
+    const normalizedEmail = email.toLowerCase().trim();
+    if (normalizedEmail !== ADMIN_EMAIL || !comparePassword(password, ADMIN_PASSWORD_HASH)) {
+      console.log("[auth/admin-login] Invalid credentials attempt for:", normalizedEmail);
       return res.status(401).json({ error: "INVALID_CREDENTIALS", message: "Invalid administrator credentials" });
     }
+    console.log("[auth/admin-login] Credentials valid. Looking up admin user:", ADMIN_EMAIL);
     let user = await db.findUserByEmail(ADMIN_EMAIL);
     if (!user) {
+      console.log("[auth/admin-login] Admin user not found in database. Creating...");
       const randomHash = hashPassword(`${Math.random().toString(36).slice(2)}${Date.now()}`);
       const created = await db.createUser({
         name: ADMIN_EMAIL.split("@")[0],
@@ -1405,19 +1463,24 @@ router.post("/admin-login", async (req, res) => {
         role: "ADMIN"
       });
       user = created;
+      console.log("[auth/admin-login] Admin user created with ID:", user.id);
     } else if (user.role !== "ADMIN") {
+      console.log("[auth/admin-login] User exists but role is", user.role, "- upgrading to ADMIN");
       await db.updateUser(user.id, { role: "ADMIN" });
     }
     await db.updateUser(user.id, { lastLoginAt: (/* @__PURE__ */ new Date()).toISOString() });
     const safeUser = await db.findUserById(user.id);
     if (!safeUser) {
+      console.error("[auth/admin-login] Admin user retrieval failed after creation/update for ID:", user.id);
       return res.status(500).json({ error: "SERVER_ERROR", message: "User retrieval failed" });
     }
     const token = generateToken(safeUser);
+    console.log("[auth/admin-login] Admin login successful for:", ADMIN_EMAIL);
     return res.json({ token, user: safeUser });
   } catch (err) {
-    console.error("Admin login error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Admin login failed" });
+    console.error("[auth/admin-login] Admin login error:", err);
+    const errorMessage = err.message || "Admin login failed";
+    return res.status(500).json({ error: "SERVER_ERROR", message: errorMessage });
   }
 });
 router.post("/login", async (req, res) => {

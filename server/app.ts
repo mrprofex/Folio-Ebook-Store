@@ -19,8 +19,40 @@ import uploadRoutes from './routes/upload';
 export function createApp() {
   const app = express();
 
+  // Trust Vercel proxy for secure cookies / correct hostnames
+  if (process.env.VERCEL === '1' || process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   app.use(express.json({ limit: '20mb' }));
   app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+  // CORS configuration
+  const corsOrigins = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || process.env.APP_URL || '*';
+  const allowedOrigins = corsOrigins.split(',').map((origin) => origin.trim()).filter(Boolean);
+
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Vary', 'Origin');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
+  // Request timeout middleware
+  app.use((req, res, next) => {
+    const timeout = parseInt(process.env.REQUEST_TIMEOUT || '30000', 10);
+    req.setTimeout(timeout);
+    res.setTimeout(timeout);
+    next();
+  });
 
   const uploadsDir = path.join(process.cwd(), 'uploads');
   app.use('/uploads', express.static(uploadsDir));
