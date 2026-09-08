@@ -315,6 +315,15 @@ class Database {
     return map;
   }
 
+  private async loadEbookMapByIds(ids: Set<string> | string[]): Promise<Map<string, Ebook>> {
+    const idArray = Array.from(ids);
+    if (idArray.length === 0) return new Map();
+    const res = await pool.query('SELECT * FROM ebooks WHERE id = ANY($1::text[])', [idArray]);
+    const map = new Map<string, Ebook>();
+    for (const r of res.rows) map.set(r.id, mapEbook(r));
+    return map;
+  }
+
   async getAllEbooks(options: {
     search?: string;
     category?: string;
@@ -350,8 +359,21 @@ class Database {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
-    const coupons = await this.loadAllCoupons();
-    const ebookMap = await this.loadEbookMap();
+    // Batch enrich: load only the data needed for the returned ebooks
+    const ebookIds = list.map(e => e.id);
+    const ebookMap = new Map<string, Ebook>();
+    for (const e of list) ebookMap.set(e.id, e);
+
+    // Load coupons only for the returned ebooks
+    let coupons: Coupon[] = [];
+    if (ebookIds.length > 0) {
+      const couponRes = await pool.query(
+        'SELECT * FROM coupons WHERE ebook_id = ANY($1::text[])',
+        [ebookIds]
+      );
+      coupons = couponRes.rows.map(mapCoupon);
+    }
+
     const out: Ebook[] = [];
     for (const e of list) out.push(await this.enrichEbook(e, coupons, ebookMap));
     return out;
@@ -420,9 +442,32 @@ class Database {
     coupons?: Coupon[],
     ebookMap?: Map<string, Ebook>
   ): Promise<Ebook> {
-    const allCoupons = coupons ?? (await this.loadAllCoupons());
-    const map = ebookMap ?? (await this.loadEbookMap());
     const now = new Date().toISOString();
+
+    // Load only needed data for this single ebook
+    let allCoupons = coupons;
+    let map = ebookMap;
+
+    if (!allCoupons) {
+      const couponRes = await pool.query('SELECT * FROM coupons WHERE ebook_id = $1', [book.id]);
+      allCoupons = couponRes.rows.map(mapCoupon);
+    }
+
+    if (!map) {
+      const ebookIds = new Set<string>([book.id]);
+      if (book.bonusEbookId) ebookIds.add(book.bonusEbookId);
+      if (book.bonusItems && Array.isArray(book.bonusItems)) {
+        for (const item of book.bonusItems) {
+          if (item.ebookId) ebookIds.add(item.ebookId);
+        }
+      }
+      if (book.comboItems && Array.isArray(book.comboItems)) {
+        for (const item of book.comboItems) {
+          if (item.ebookId) ebookIds.add(item.ebookId);
+        }
+      }
+      map = await this.loadEbookMapByIds(ebookIds);
+    }
 
     let bonusEbook: Ebook['bonusEbook'] = undefined;
     if (book.hasBonus && book.bonusType === 'existing' && book.bonusEbookId) {
@@ -640,9 +685,8 @@ class Database {
       sql += ` AND UPPER(code) LIKE $${params.length}`;
     }
     const res = await pool.query(sql, params);
-    const out: Coupon[] = [];
-    for (const r of res.rows) out.push(await this.enrichCoupon(mapCoupon(r)));
-    return out;
+    const coupons = res.rows.map(mapCoupon);
+    return await this.enrichCouponsBatch(coupons);
   }
 
   async findCouponById(id: string): Promise<Coupon | null> {
@@ -660,9 +704,8 @@ class Database {
 
   async getCouponsByEbookId(ebookId: string): Promise<Coupon[]> {
     const res = await pool.query('SELECT * FROM coupons WHERE ebook_id = $1', [ebookId]);
-    const out: Coupon[] = [];
-    for (const r of res.rows) out.push(await this.enrichCoupon(mapCoupon(r)));
-    return out;
+    const coupons = res.rows.map(mapCoupon);
+    return await this.enrichCouponsBatch(coupons);
   }
 
   async createCoupon(data: {
@@ -827,10 +870,62 @@ class Database {
     };
   }
 
+  private async enrichCouponsBatch(coupons: Coupon[]): Promise<Coupon[]> {
+    if (coupons.length === 0) return coupons;
+
+    const ebookIds = [...new Set(coupons.map(c => c.ebookId))];
+    const couponIds = coupons.map(c => c.id);
+
+    const ebooksRes = await pool.query(
+      'SELECT id, title, slug, price, currency FROM ebooks WHERE id = ANY($1::text[])',
+      [ebookIds]
+    );
+    const ebookMap = new Map(ebooksRes.rows.map(r => [r.id, r]));
+
+    const purchasesRes = await pool.query(
+      `SELECT coupon_id, amount, discount_amount FROM purchases 
+       WHERE coupon_id = ANY($1::text[]) AND payment_status = 'SUCCESS'`,
+      [couponIds]
+    );
+    const purchaseStats = new Map<string, { totalRevenueGenerated: number; totalDiscountGiven: number }>();
+    for (const r of purchasesRes.rows) {
+      const stats = purchaseStats.get(r.coupon_id) || { totalRevenueGenerated: 0, totalDiscountGiven: 0 };
+      stats.totalRevenueGenerated += Number(r.amount);
+      stats.totalDiscountGiven += Number(r.discount_amount || 0);
+      purchaseStats.set(r.coupon_id, stats);
+    }
+
+    return coupons.map(coupon => {
+      const ebook = ebookMap.get(coupon.ebookId);
+      const stats = purchaseStats.get(coupon.id) || { totalRevenueGenerated: 0, totalDiscountGiven: 0 };
+      return {
+        ...coupon,
+        ebook: ebook ? {
+          id: ebook.id,
+          title: ebook.title,
+          slug: ebook.slug,
+          price: Number(ebook.price),
+          currency: ebook.currency
+        } : undefined,
+        totalRevenueGenerated: Number(stats.totalRevenueGenerated.toFixed(2)),
+        totalDiscountGiven: Number(stats.totalDiscountGiven.toFixed(2))
+      };
+    });
+  }
+
   // --- PURCHASE METHODS ---
 
   private async loadUserMap(): Promise<Map<string, User>> {
     const res = await pool.query('SELECT * FROM users');
+    const map = new Map<string, User>();
+    for (const r of res.rows) map.set(r.id, mapUser(r));
+    return map;
+  }
+
+  private async loadUserMapByIds(ids: Set<string> | string[]): Promise<Map<string, User>> {
+    const idArray = Array.from(ids);
+    if (idArray.length === 0) return new Map();
+    const res = await pool.query('SELECT * FROM users WHERE id = ANY($1::text[])', [idArray]);
     const map = new Map<string, User>();
     for (const r of res.rows) map.set(r.id, mapUser(r));
     return map;
@@ -954,9 +1049,15 @@ class Database {
       "SELECT * FROM purchases WHERE user_id = $1 AND payment_status = 'SUCCESS' ORDER BY purchased_at DESC",
       [userId]
     );
-    const ebookMap = await this.loadEbookMap();
-    const userMap = await this.loadUserMap();
     const out: Purchase[] = [];
+    const ebookIds = new Set<string>();
+    const userIds = new Set<string>();
+    for (const r of res.rows) {
+      ebookIds.add(r.ebook_id);
+      userIds.add(r.user_id);
+    }
+    const ebookMap = await this.loadEbookMapByIds(ebookIds);
+    const userMap = await this.loadUserMapByIds(userIds);
     for (const r of res.rows) out.push(await this.enrichPurchase(mapPurchase(r), ebookMap, userMap));
     return out;
   }
@@ -986,8 +1087,14 @@ class Database {
     }
     sql += ' ORDER BY p.purchased_at DESC';
     const res = await pool.query(sql, params);
-    const ebookMap = await this.loadEbookMap();
-    const userMap = await this.loadUserMap();
+    const ebookIds = new Set<string>();
+    const userIds = new Set<string>();
+    for (const r of res.rows) {
+      ebookIds.add(r.ebook_id);
+      userIds.add(r.user_id);
+    }
+    const ebookMap = await this.loadEbookMapByIds(ebookIds);
+    const userMap = await this.loadUserMapByIds(userIds);
     const out: Purchase[] = [];
     for (const r of res.rows) out.push(await this.enrichPurchase(mapPurchase(r), ebookMap, userMap));
     return out;
@@ -1010,79 +1117,148 @@ class Database {
   // --- ANALYTICS DASHBOARD ---
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const purchasesRes = await pool.query(
-      "SELECT * FROM purchases WHERE payment_status = 'SUCCESS' ORDER BY purchased_at DESC"
-    );
-    const ebookMap = await this.loadEbookMap();
-    const userMap = await this.loadUserMap();
-    const successfulPurchases = purchasesRes.rows.map(r => r);
+    const now = new Date().toISOString();
 
-    const totalEarnings = successfulPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
-    
-    // Today's Sales using PostgreSQL timezone-aware filtering (IST)
-    const todayPurchasesRes = await pool.query(
-      `SELECT * FROM purchases 
+    const totalRes = await pool.query(
+      "SELECT COUNT(*)::int AS cnt, COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue FROM purchases WHERE payment_status = 'SUCCESS'"
+    );
+    const totalPurchases = totalRes.rows[0].cnt;
+    const totalEarnings = Number(totalRes.rows[0].revenue);
+
+    const todayRes = await pool.query(
+      `SELECT COUNT(*)::int AS cnt, COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue FROM purchases 
        WHERE payment_status = 'SUCCESS'
        AND purchased_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone
        AND purchased_at < ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone`
     );
-    const todayPurchases = todayPurchasesRes.rows;
-    const todayEarnings = todayPurchases.reduce((acc, r) => acc + Number(r.amount), 0);
+    const todayPurchases = todayRes.rows[0].cnt;
+    const todayEarnings = Number(todayRes.rows[0].revenue);
 
-    const totalPurchases = successfulPurchases.length;
     const usersCount = (await pool.query('SELECT COUNT(*)::int AS c FROM users')).rows[0].c;
     const ebooksCount = (await pool.query('SELECT COUNT(*)::int AS c FROM ebooks')).rows[0].c;
-
-    const now = new Date().toISOString();
     const activeCoupons = (await pool.query(
       "SELECT COUNT(*)::int AS c FROM coupons WHERE is_active = TRUE AND (expires_at IS NULL OR expires_at > $1)",
       [now]
     )).rows[0].c;
     const totalCouponUses = (await pool.query('SELECT COUNT(*)::int AS c FROM coupon_usages')).rows[0].c;
-    const totalDiscountsGiven = successfulPurchases.reduce((acc, r) => acc + Number(r.discount_amount || 0), 0);
+    const totalDiscountsGiven = Number(
+      (await pool.query("SELECT COALESCE(SUM(discount_amount), 0)::numeric(12,2) AS total FROM purchases WHERE payment_status = 'SUCCESS'")).rows[0].total
+    );
 
-    const recentPurchases: Purchase[] = [];
-    for (const r of successfulPurchases.slice(0, 10)) {
-      recentPurchases.push(await this.enrichPurchase(mapPurchase(r), ebookMap, userMap));
-    }
-
-    const salesMap: Record<string, { count: number; revenue: number }> = {};
-    for (const r of successfulPurchases) {
-      if (!salesMap[r.ebook_id]) salesMap[r.ebook_id] = { count: 0, revenue: 0 };
-      salesMap[r.ebook_id].count += 1;
-      salesMap[r.ebook_id].revenue += Number(r.amount);
-    }
-    const topSellingEbooks = Object.entries(salesMap)
-      .map(([ebookId, stats]) => {
-        const ebook = ebookMap.get(ebookId);
-        return ebook ? { ebook: ebook, salesCount: stats.count, revenue: Number(stats.revenue.toFixed(2)) } : null;
+    // Recent purchases (limit 10)
+    const recentRes = await pool.query(
+      "SELECT p.*, u.name as user_name, u.email as user_email, e.title as ebook_title, e.slug as ebook_slug, e.cover_image_url as ebook_cover FROM purchases p LEFT JOIN users u ON u.id = p.user_id LEFT JOIN ebooks e ON e.id = p.ebook_id WHERE p.payment_status = 'SUCCESS' ORDER BY p.purchased_at DESC LIMIT 10"
+    );
+    const recentPurchases: Purchase[] = await Promise.all(
+      recentRes.rows.map(async (r) => {
+        const purchase = mapPurchase(r);
+        const ebook = r.ebook_title ? {
+          id: r.ebook_id,
+          title: r.ebook_title,
+          slug: r.ebook_slug,
+          description: '',
+          author: '',
+          category: '',
+          price: 0,
+          currency: 'INR',
+          coverImageUrl: r.ebook_cover,
+          pdfUrl: '',
+          fileSize: '',
+          pageCount: 0,
+          featured: false,
+          published: false,
+          downloadCount: 0,
+          createdAt: '',
+          updatedAt: ''
+        } : undefined;
+        const user = r.user_name ? {
+          id: r.user_id,
+          name: r.user_name,
+          email: r.user_email,
+          role: 'USER' as const,
+          createdAt: '',
+          updatedAt: '',
+          isActive: true
+        } : undefined;
+        return this.enrichPurchase(purchase, ebook ? new Map([[ebook.id, ebook]]) : undefined, user ? new Map([[user.id, user]]) : undefined);
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
-      .sort((a, b) => b.salesCount - a.salesCount)
-      .slice(0, 5);
+    );
 
+    // Top selling ebooks using SQL aggregation
+    const topRes = await pool.query(
+      `SELECT ebook_id, COUNT(*)::int AS sales_count, COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue
+       FROM purchases WHERE payment_status = 'SUCCESS' GROUP BY ebook_id ORDER BY sales_count DESC LIMIT 5`
+    );
+    const ebookIdsForTop = [...new Set(topRes.rows.map(r => r.ebook_id))];
+    const topEbooks: any[] = [];
+    if (ebookIdsForTop.length > 0) {
+      const ebooksRes = await pool.query('SELECT id, title, slug, cover_image_url, author, price, page_count, file_size FROM ebooks WHERE id = ANY($1::text[])', [ebookIdsForTop]);
+      const ebookLookup = new Map(ebooksRes.rows.map(r => [r.id, r]));
+      for (const row of topRes.rows) {
+        const ebook = ebookLookup.get(row.ebook_id);
+        if (ebook) {
+          topEbooks.push({
+            ebook: {
+              id: ebook.id,
+              title: ebook.title,
+              slug: ebook.slug,
+              coverImageUrl: ebook.cover_image_url,
+              author: ebook.author,
+              price: Number(ebook.price),
+              pageCount: Number(ebook.page_count),
+              fileSize: ebook.file_size
+            },
+            salesCount: row.sales_count,
+            revenue: Number(row.revenue)
+          });
+        }
+      }
+    }
+
+    // Revenue by month (last 6 months)
     const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+    const currentMonth = new Date().getMonth();
     const revenueByMonth = months.map((m, monthIndex) => {
-      const salesInMonth = successfulPurchases.filter(p => new Date(p.purchased_at).getMonth() === monthIndex + 2);
-      const rev = salesInMonth.reduce((acc, c) => acc + Number(c.amount), 0);
+      const targetMonth = ((currentMonth - 5 + monthIndex) % 12 + 12) % 12;
+      const targetYear = new Date().getFullYear() - (currentMonth < 5 && monthIndex >= currentMonth ? 1 : 0);
       return {
         month: m,
-        revenue: rev > 0 ? Number(rev.toFixed(2)) : Math.floor(totalEarnings * (0.1 + monthIndex * 0.05)),
-        sales: salesInMonth.length > 0 ? salesInMonth.length : (monthIndex + 1) * 2
+        revenue: 0,
+        sales: 0
       };
     });
 
+    const monthlyRes = await pool.query(
+      `SELECT EXTRACT(MONTH FROM purchased_at)::int AS month, 
+              COUNT(*)::int AS sales, 
+              COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue 
+       FROM purchases 
+       WHERE payment_status = 'SUCCESS' 
+       AND purchased_at >= NOW() - INTERVAL '6 months'
+       GROUP BY EXTRACT(MONTH FROM purchased_at)`
+    );
+    for (const row of monthlyRes.rows) {
+      const idx = (row.month - currentMonth + 60) % 12;
+      if (idx >= 0 && idx < 6) {
+        revenueByMonth[idx] = {
+          month: revenueByMonth[idx].month,
+          revenue: Number(row.revenue),
+          sales: row.sales
+        };
+      }
+    }
+
     return {
-      totalEarnings: Number(totalEarnings.toFixed(2)),
-      todayEarnings: Number(todayEarnings.toFixed(2)),
+      totalEarnings,
+      todayEarnings,
       totalPurchases,
       totalUsers: usersCount,
       totalEbooks: ebooksCount,
       activeCoupons,
       totalCouponUses,
-      totalDiscountsGiven: Number(totalDiscountsGiven.toFixed(2)),
+      totalDiscountsGiven,
       recentPurchases,
-      topSellingEbooks,
+      topSellingEbooks: topEbooks,
       revenueByMonth
     };
   }
@@ -1104,8 +1280,13 @@ class Database {
       "SELECT * FROM purchases WHERE user_id = $1 AND payment_status = 'SUCCESS'",
       [userId]
     );
-    const ebookMap = await this.loadEbookMap();
-    const userMap = await this.loadUserMap();
+    const ebookIds = new Set<string>();
+    const userIds = new Set<string>([userId]);
+    for (const r of res.rows) {
+      ebookIds.add(r.ebook_id);
+    }
+    const ebookMap = await this.loadEbookMapByIds(ebookIds);
+    const userMap = await this.loadUserMapByIds(userIds);
 
     for (const r of res.rows) {
       const purchase = await this.enrichPurchase(mapPurchase(r), ebookMap, userMap);
