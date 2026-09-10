@@ -5,6 +5,12 @@ import { Readable } from 'stream';
 import http from 'http';
 import https from 'https';
 import { authMiddleware, adminMiddleware } from '../auth.js';
+import {
+  isSupabaseConfigured,
+  uploadPdfToSupabase,
+  deletePdfFromSupabase,
+  supabase
+} from '../supabase.js';
 
 const router = Router();
 
@@ -113,9 +119,10 @@ async function uploadToCloudinaryUnsigned(
   buffer: Buffer,
   options: {
     folder: string;
-    resource_type: string;
+    resource_type: 'image' | 'raw' | 'video' | 'auto';
     upload_preset: string;
     public_id: string;
+    filename?: string;
   }
 ): Promise<any> {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -123,77 +130,36 @@ async function uploadToCloudinaryUnsigned(
     throw new Error('Cloudinary cloud name is not configured');
   }
 
-  const boundary = `----FormBoundary${Math.random().toString(36).substring(2, 20)}`;
-  const uploadPath = `/${options.resource_type}/upload`;
-  const apiUrl = new URL(`https://api.cloudinary.com/v1_1/${cloudName}${uploadPath}`);
-
-  const params = new URLSearchParams();
-  params.append('folder', options.folder);
-  params.append('resource_type', options.resource_type);
-  params.append('upload_preset', options.upload_preset);
-  params.append('unsigned', 'true');
-  params.append('public_id', options.public_id);
-  params.append('use_filename', 'true');
-  params.append('unique_filename', 'true');
-  params.append('timestamp', String(Math.floor(Date.now() / 1000)));
-
-  const parts: Buffer[] = [];
-  for (const [key, value] of params.entries()) {
-    parts.push(
-      Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`,
-        'utf8'
-      )
-    );
-  }
-
-  const fileHeader = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-    'binary'
-  );
-  parts.push(fileHeader);
-  parts.push(buffer);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-  const body = Buffer.concat(parts);
-
   return new Promise((resolve, reject) => {
-    const req = https.request(
+    const uploadStream = cloudinary.uploader.upload_stream(
       {
-        hostname: apiUrl.hostname,
-        path: apiUrl.pathname,
-        method: 'POST',
-        headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': body.length
-        }
+        folder: options.folder,
+        resource_type: options.resource_type,
+        upload_preset: options.upload_preset,
+        unsigned: true,
+        public_id: options.public_id,
+        filename_override: options.filename || undefined,
+        timestamp: Math.floor(Date.now() / 1000)
       },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('end', () => {
-          const responseBody = Buffer.concat(chunks).toString();
-          try {
-            const result = JSON.parse(responseBody);
-            if (res.statusCode !== 200 || result.error) {
-              const error: any = new Error(result.error?.message || `HTTP ${res.statusCode}`);
-              error.http_code = res.statusCode;
-              error.response = { data: result };
-              return reject(error);
-            }
-            resolve(result);
-          } catch (e) {
-            reject(new Error(`Invalid JSON response: ${responseBody}`));
-          }
-        });
+      (error, result) => {
+        if (error) {
+          const err: any = new Error(error.message || 'Cloudinary upload failed');
+          err.http_code = error.http_code;
+          err.response = error.response;
+          return reject(err);
+        }
+        resolve(result);
       }
     );
 
-    req.on('error', (err) => {
+    const readable = new Readable({ read() {} });
+    readable.push(buffer);
+    readable.push(null);
+    readable.pipe(uploadStream);
+
+    uploadStream.on('error', (err) => {
       reject(err);
     });
-    req.write(body);
-    req.end();
   });
 }
 
@@ -201,11 +167,7 @@ async function uploadToCloudinaryUnsigned(
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
     console.log('[UPLOAD] Cloudinary configured:', isCloudinaryConfigured);
-    console.log('[UPLOAD] CLOUDINARY_CLOUD_NAME exists:', Boolean(process.env.CLOUDINARY_CLOUD_NAME));
-    console.log('[UPLOAD] CLOUDINARY_API_KEY exists:', Boolean(process.env.CLOUDINARY_API_KEY));
-    console.log('[UPLOAD] CLOUDINARY_API_SECRET exists:', Boolean(process.env.CLOUDINARY_API_SECRET));
-    console.log('[UPLOAD] Cloudinary SDK:', CLOUDINARY_SDK_VERSION);
-    console.log('[UPLOAD] Upload preset:', UPLOAD_PRESET);
+    console.log('[UPLOAD] Supabase configured:', isSupabaseConfigured);
 
     if (!req.file) {
       return res.status(400).json({ error: 'NO_FILE', message: 'No file was uploaded' });
@@ -225,21 +187,51 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
       });
     }
 
-    const resourceType = isImage ? 'image' : 'raw';
-    const folder = isImage ? 'ebooks/covers' : 'ebooks';
-    console.log('[UPLOAD] Is image:', isImage, 'Is PDF:', isPdf, 'Resource type:', resourceType, 'Folder:', folder);
+    // Handle PDF uploads via Supabase
+    if (isPdf) {
+      if (!isSupabaseConfigured) {
+        console.log('[UPLOAD] Supabase not configured for PDF upload');
+        return res.status(500).json({
+          error: 'SUPABASE_NOT_CONFIGURED',
+          message: 'Supabase is required for PDF uploads. Please configure SUPABASE_URL and SUPABASE_SECRET_KEY.'
+        });
+      }
 
+      try {
+        console.log('[UPLOAD] Uploading PDF to Supabase Storage...');
+        const { path: storagePath, size } = await uploadPdfToSupabase(req.file.buffer, req.file.originalname);
+
+        console.log('[UPLOAD] Supabase upload success:', storagePath);
+        return res.json({
+          url: storagePath,
+          publicId: storagePath,
+          resourceType: 'supabase',
+          fileSize: `${(size / (1024 * 1024)).toFixed(2)} MB`,
+          filename: req.file.originalname
+        });
+      } catch (supabaseErr: any) {
+        console.error('[UPLOAD] Supabase upload error:', supabaseErr.message);
+        return res.status(500).json({
+          error: 'SUPABASE_UPLOAD_FAILED',
+          message: `Supabase upload failed: ${supabaseErr.message}`
+        });
+      }
+    }
+
+    // Handle image uploads via Cloudinary
     if (!isCloudinaryConfigured) {
-      console.log('[UPLOAD] Cloudinary not configured');
+      console.log('[UPLOAD] Cloudinary not configured for image upload');
       return res.status(500).json({
         error: 'CLOUDINARY_NOT_CONFIGURED',
-        message: 'Cloudinary is required for file uploads on Vercel. Please configure CLOUDINARY_CLOUD_NAME.'
+        message: 'Cloudinary is required for image uploads. Please configure CLOUDINARY_CLOUD_NAME.'
       });
     }
 
-    try {
-      console.log('[UPLOAD] Uploading to Cloudinary - folder:', folder, 'resource_type:', resourceType, 'upload_preset:', UPLOAD_PRESET);
+    const resourceType = 'image';
+    const folder = 'ebooks/covers';
+    console.log('[UPLOAD] Uploading image to Cloudinary - folder:', folder, 'resource_type:', resourceType);
 
+    try {
       const uploadResult = await withCloudinary403Capture(async () => {
         const publicId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
@@ -247,7 +239,8 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
           folder,
           resource_type: resourceType,
           upload_preset: UPLOAD_PRESET,
-          public_id: publicId
+          public_id: publicId,
+          filename: req.file.originalname
         });
       });
 
@@ -298,42 +291,57 @@ router.get('/diagnostic', authMiddleware, adminMiddleware, async (req, res) => {
       apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
       uploadPreset: UPLOAD_PRESET,
       sdkVersion: CLOUDINARY_SDK_VERSION,
+      supabaseConfigured: isSupabaseConfigured,
+      supabaseUrl: Boolean(process.env.SUPABASE_URL),
+      supabaseSecretKey: Boolean(process.env.SUPABASE_SECRET_KEY),
       timestamp: new Date().toISOString()
     };
 
-    if (!isCloudinaryConfigured) {
-      return res.json(diagnostics);
-    }
+    if (isCloudinaryConfigured) {
+      try {
+        const usage = await cloudinary.api.usage();
+        diagnostics.apiUsage = {
+          plan: usage.plan || 'unknown',
+          uploads: usage.uploads || 0,
+          storage: usage.storage || 0,
+          bandwidth: usage.bandwidth || 0
+        };
+        diagnostics.authTest = 'SUCCESS';
+      } catch (authErr: any) {
+        diagnostics.authTest = 'FAILED';
+        diagnostics.authError = {
+          message: authErr.message,
+          http_code: authErr.http_code || 'N/A',
+          code: authErr.code || 'N/A'
+        };
+        if (authErr.response?.data) {
+          diagnostics.authError.data = authErr.response.data;
+        }
+      }
 
-    try {
-      const usage = await cloudinary.api.usage();
-      diagnostics.apiUsage = {
-        plan: usage.plan || 'unknown',
-        uploads: usage.uploads || 0,
-        storage: usage.storage || 0,
-        bandwidth: usage.bandwidth || 0
-      };
-      diagnostics.authTest = 'SUCCESS';
-    } catch (authErr: any) {
-      diagnostics.authTest = 'FAILED';
-      diagnostics.authError = {
-        message: authErr.message,
-        http_code: authErr.http_code || 'N/A',
-        code: authErr.code || 'N/A'
-      };
-      if (authErr.response?.data) {
-        diagnostics.authError.data = authErr.response.data;
+      try {
+        const resourceTypes = await cloudinary.api.resource_types();
+        diagnostics.resourceTypes = resourceTypes;
+      } catch (rtErr: any) {
+        diagnostics.resourceTypesError = {
+          message: rtErr.message,
+          http_code: rtErr.http_code || 'N/A'
+        };
       }
     }
 
-    try {
-      const resourceTypes = await cloudinary.api.resource_types();
-      diagnostics.resourceTypes = resourceTypes;
-    } catch (rtErr: any) {
-      diagnostics.resourceTypesError = {
-        message: rtErr.message,
-        http_code: rtErr.http_code || 'N/A'
-      };
+    if (isSupabaseConfigured) {
+      try {
+        const { data: buckets } = await supabase!.storage.listBuckets();
+        diagnostics.supabaseBuckets = buckets?.map(b => b.name) || [];
+        diagnostics.supabaseAuthTest = 'SUCCESS';
+      } catch (sbErr: any) {
+        diagnostics.supabaseAuthTest = 'FAILED';
+        diagnostics.supabaseAuthError = {
+          message: sbErr.message,
+          status: sbErr.status || 'N/A'
+        };
+      }
     }
 
     res.json(diagnostics);
@@ -342,18 +350,37 @@ router.get('/diagnostic', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// Delete a Cloudinary asset by public_id (Admin only)
+// Delete a Cloudinary asset or Supabase PDF by public_id/storage_path (Admin only)
 router.delete('/file', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const { publicId, resourceType } = req.body;
+  const { publicId, resourceType } = req.body;
 
-    if (!publicId || !resourceType) {
-      return res.status(400).json({
-        error: 'VALIDATION_ERROR',
-        message: 'publicId and resourceType are required to delete a Cloudinary asset'
+  if (!publicId || !resourceType) {
+    return res.status(400).json({
+      error: 'VALIDATION_ERROR',
+      message: 'publicId and resourceType are required to delete an asset'
+    });
+  }
+
+  try {
+    // Handle Supabase PDF deletion
+    if (resourceType === 'supabase') {
+      if (!isSupabaseConfigured) {
+        return res.status(500).json({
+          error: 'SUPABASE_NOT_CONFIGURED',
+          message: 'Supabase is not configured on this server'
+        });
+      }
+
+      console.log('[UPLOAD] Deleting Supabase PDF:', publicId);
+
+      await deletePdfFromSupabase(publicId);
+      return res.json({
+        success: true,
+        message: 'Supabase PDF deleted successfully'
       });
     }
 
+    // Handle Cloudinary asset deletion
     if (!isCloudinaryConfigured) {
       return res.status(500).json({
         error: 'CLOUDINARY_NOT_CONFIGURED',
@@ -383,13 +410,13 @@ router.delete('/file', authMiddleware, adminMiddleware, async (req, res) => {
       result,
       message: result.result === 'ok' ? 'Asset deleted successfully' : `Cloudinary returned: ${result.result}`
     });
-  } catch (cloudErr: any) {
-    console.error('[UPLOAD] Cloudinary delete error:', cloudErr.message);
-    const extracted = extractCloudinaryError(cloudErr);
+  } catch (err: any) {
+    console.error('[UPLOAD] Delete error:', err.message);
+    const isSupabase = resourceType === 'supabase';
+    const errorCode = isSupabase ? 'SUPABASE_DELETE_FAILED' : 'CLOUDINARY_DELETE_FAILED';
     return res.status(500).json({
-      error: 'CLOUDINARY_DELETE_FAILED',
-      message: `Cloudinary delete failed (Error ${extracted.httpCode}): ${extracted.message}`,
-      details: extracted.details
+      error: errorCode,
+      message: `${isSupabase ? 'Supabase' : 'Cloudinary'} delete failed: ${err.message}`
     });
   }
 });

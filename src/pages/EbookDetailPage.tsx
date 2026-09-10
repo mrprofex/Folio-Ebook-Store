@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Ebook, Purchase } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, getStoredToken } from '../lib/api';
+import { applySEO, createProductJsonLd } from '../components/SEO';
 import {
   BookOpen,
   Download,
@@ -20,7 +21,8 @@ import {
   Ticket,
   Check,
   Percent,
-  Layers
+  Layers,
+  Tag
 } from 'lucide-react';
 
 interface EbookDetailPageProps {
@@ -88,6 +90,45 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
 
     fetchEbook();
   }, [slug, isAuthenticated]);
+
+  useEffect(() => {
+    if (!ebook) return;
+
+    const baseUrl = 'https://folio-ebook.vercel.app';
+    const canonicalUrl = `${baseUrl}/ebooks/${ebook.slug}`;
+    const cleanDesc = (ebook.description || '').replace(/<[^>]*>/g, '').substring(0, 160);
+
+    applySEO({
+      title: `${ebook.title} — Buy E-Book | Folio`,
+      description: cleanDesc || `Discover ${ebook.title} by ${ebook.author}. Instant PDF download available on Folio.`,
+      canonical: canonicalUrl,
+      ogImage: ebook.coverImageUrl,
+      ogType: 'product',
+      breadcrumbs: [
+        { label: 'Home', href: '/' },
+        { label: 'Ebooks', href: '/ebooks' },
+        { label: ebook.category, href: `/ebooks?category=${encodeURIComponent(ebook.category)}` },
+        { label: ebook.title }
+      ],
+      jsonLd: createProductJsonLd({
+        id: ebook.id,
+        title: ebook.title,
+        author: ebook.author,
+        description: ebook.description,
+        category: ebook.category,
+        price: ebook.price,
+        originalPrice: ebook.originalPrice,
+        currency: ebook.currency || 'INR',
+        coverImageUrl: ebook.coverImageUrl,
+        slug: ebook.slug,
+        pageCount: ebook.pageCount,
+        publicationType: ebook.publicationType,
+        comboItems: ebook.comboItems
+      })
+    });
+  }, [ebook]);
+
+  // ... rest of the component stays the same
 
   const handleApplyCoupon = async () => {
     if (!couponInput.trim() || !ebook) return;
@@ -300,11 +341,11 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-16 animate-pulse space-y-8">
+      <div className="max-w-5xl mx-auto px-4 py-12 md:py-16 animate-pulse space-y-8">
         <div className="h-6 bg-[#EAE4D9] rounded w-24"></div>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          <div className="md:col-span-5 aspect-[3/4] bg-[#EAE4D9] rounded-xl"></div>
-          <div className="md:col-span-7 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          <div className="lg:col-span-5 aspect-[2/3] bg-[#EAE4D9] rounded-xl max-w-sm mx-auto"></div>
+          <div className="lg:col-span-7 space-y-4">
             <div className="h-8 bg-[#EAE4D9] rounded w-3/4"></div>
             <div className="h-4 bg-[#EAE4D9] rounded w-1/3"></div>
             <div className="h-24 bg-[#EAE4D9] rounded w-full"></div>
@@ -337,39 +378,49 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
 
   const isCombo = ebook.publicationType === 'COMBO';
   const comboVolumes = ebook.comboItems || [];
-  const savingsPercent = isCombo && ebook.totalOriginalValue && ebook.totalOriginalValue > ebook.price
-    ? Math.round(((ebook.totalOriginalValue - ebook.price) / ebook.totalOriginalValue) * 100)
-    : 0;
-  const currentCheckoutPrice = appliedCoupon ? appliedCoupon.finalPrice : ebook.price;
+  
+  // Calculate original price and discount
+  const originalPrice = ebook.originalPrice || ebook.price;
+  const sellingPrice = ebook.price;
+  const hasDiscount = originalPrice > sellingPrice;
+  const discountPercent = hasDiscount 
+    ? Math.round(((originalPrice - sellingPrice) / originalPrice) * 100)
+    : (isCombo && ebook.totalOriginalValue && ebook.totalOriginalValue > ebook.price
+      ? Math.round(((ebook.totalOriginalValue - ebook.price) / ebook.totalOriginalValue) * 100)
+      : 0);
+  
+  const currentCheckoutPrice = appliedCoupon ? appliedCoupon.finalPrice : sellingPrice;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 md:py-12">
       {/* Back button */}
       <button
         id="btn-back-to-catalog"
         onClick={() => onNavigate('/ebooks')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#736B63] hover:text-[#1A1817] mb-8 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#736B63] hover:text-[#1A1817] mb-6 md:mb-8 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" /> Back to Catalog
       </button>
 
-      {/* Main Grid: Cover Left, Details Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+      {/* Main Grid: Cover Left, Details Right - Stacked on mobile/tablet, side-by-side on desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 lg:gap-12 items-start">
         {/* LEFT: Ebook Cover Presentation */}
-        <div className="lg:col-span-5 flex flex-col items-center">
-          <div className={`relative w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl bg-[#EAE4D9] border ${isCombo ? 'border-indigo-300 ring-2 ring-indigo-500/20' : 'border-[#D5CEC5]'}`}>
+        <div className="lg:col-span-5 flex flex-col items-center ebook-cover-container">
+          <div className={`relative w-full max-w-sm aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl bg-[#EAE4D9] border ${isCombo ? 'border-indigo-300 ring-2 ring-indigo-500/20' : 'border-[#D5CEC5]'}`}>
             <img
               src={ebook.coverImageUrl}
-              alt={ebook.title}
+              alt={`${ebook.title} by ${ebook.author}`}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover object-center"
+              width="280"
+              height="420"
             />
             {/* Book spine simulation */}
             <div className="absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-black/35 via-black/15 to-transparent pointer-events-none" />
             <div className="absolute inset-0 ring-1 ring-inset ring-black/10 pointer-events-none rounded-2xl" />
 
             {/* Badges */}
-            <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
+            <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
               {isPurchased ? (
                 <div className="px-3 py-1.5 bg-[#1B4332] text-white text-xs font-bold rounded-full shadow-lg flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" /> OWNED EDITION
@@ -389,17 +440,17 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
           </div>
 
           {/* Format Spec Below Cover */}
-          <div className="mt-6 w-full max-w-sm bg-white border border-[#E8E2D9] rounded-xl p-4 flex items-center justify-around text-center text-xs text-[#736B63]">
+          <div className="mt-4 md:mt-6 w-full max-w-sm bg-white border border-[#E8E2D9] rounded-xl p-3 md:p-4 flex items-center justify-around text-center text-xs text-[#736B63]">
             <div>
               <span className="block font-semibold text-[#1A1817]">Edition Type</span>
               <span>{isCombo ? 'Combo Bundle' : 'Single Ebook'}</span>
             </div>
-            <div className="h-6 w-px bg-[#E8E2D9]"></div>
+            <div className="h-6 w-px bg-[#E8E2D9] hidden md:block"></div>
             <div>
               <span className="block font-semibold text-[#1A1817]">{isCombo ? 'Volumes' : 'Extent'}</span>
               <span>{isCombo ? `${comboVolumes.length} Books` : `${ebook.pageCount} Pages`}</span>
             </div>
-            <div className="h-6 w-px bg-[#E8E2D9]"></div>
+            <div className="h-6 w-px bg-[#E8E2D9] hidden md:block"></div>
             <div>
               <span className="block font-semibold text-[#1A1817]">Delivery</span>
               <span>Instant PDF</span>
@@ -442,26 +493,47 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
                   <span className="text-[11px] font-semibold text-[#736B63] uppercase tracking-wider block">
                     {isPurchased ? 'License Status' : isCombo ? 'Combo Package License' : 'Single Reader License'}
                   </span>
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-serif text-3xl font-extrabold text-[#1A1817]">
-                      ₹{currentCheckoutPrice}
-                    </span>
-                    {appliedCoupon ? (
-                      <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        {appliedCoupon.discountPercentage}% OFF APPLIED (Save ₹{appliedCoupon.discountAmount})
-                      </span>
+                  <div className="flex items-baseline gap-3 mt-1">
+                    {hasDiscount ? (
+                      <>
+                        <span className="text-sm text-[#9E9589] line-through">
+                          ₹{originalPrice}
+                        </span>
+                        <span className="font-serif text-3xl font-extrabold text-[#8B2635]">
+                          ₹{sellingPrice}
+                        </span>
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                          <Tag className="w-3 h-3" /> Save {discountPercent}%
+                        </span>
+                      </>
+                    ) : appliedCoupon ? (
+                      <>
+                        <span className="font-serif text-3xl font-extrabold text-[#1A1817]">
+                          ₹{currentCheckoutPrice}
+                        </span>
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          {appliedCoupon.discountPercentage}% OFF APPLIED (Save ₹{appliedCoupon.discountAmount})
+                        </span>
+                      </>
                     ) : isCombo && ebook.totalOriginalValue ? (
                       <div className="flex items-center gap-2">
+                        <span className="font-serif text-3xl font-extrabold text-[#1A1817]">
+                          ₹{currentCheckoutPrice}
+                        </span>
                         <span className="text-sm text-[#9E9589] line-through">
                           ₹{ebook.totalOriginalValue}
                         </span>
-                        {savingsPercent > 0 && (
+                        {discountPercent > 0 && (
                           <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                            Save {savingsPercent}%
+                            Save {discountPercent}%
                           </span>
                         )}
                       </div>
-                    ) : null}
+                    ) : (
+                      <span className="font-serif text-3xl font-extrabold text-[#1A1817]">
+                        ₹{currentCheckoutPrice}
+                      </span>
+                    )}
                   </div>
                 </div>
 

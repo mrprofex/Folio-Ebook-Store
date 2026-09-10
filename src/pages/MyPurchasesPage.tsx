@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Purchase } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, getStoredToken } from '../lib/api';
+import { applySEO } from '../components/SEO';
 import {
   Download,
   BookOpen,
@@ -28,6 +29,13 @@ export const MyPurchasesPage: React.FC<MyPurchasesPageProps> = ({
 }) => {
   const { user, isAuthenticated, openAuthModal } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+
+  useEffect(() => {
+    applySEO({
+      noindex: true,
+      title: 'My Purchased Library'
+    });
+  }, []);
   const [loading, setLoading] = useState(true);
   const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
 

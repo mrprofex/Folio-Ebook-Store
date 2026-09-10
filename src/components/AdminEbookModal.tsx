@@ -61,6 +61,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState('Technology & Engineering');
   const [price, setPrice] = useState('499');
+  const [originalPrice, setOriginalPrice] = useState('499');
   const [totalOriginalValue, setTotalOriginalValue] = useState<string>('999');
   const [currency, setCurrency] = useState('INR');
   const [pageCount, setPageCount] = useState('240');
@@ -151,6 +152,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setAuthor(targetEbook.author || '');
       setCategory(targetEbook.category || 'Technology & Engineering');
       setPrice(targetEbook.price !== undefined ? targetEbook.price.toString() : '499');
+      setOriginalPrice(targetEbook.originalPrice !== undefined ? targetEbook.originalPrice.toString() : (targetEbook.price || 499).toString());
       setTotalOriginalValue(targetEbook.totalOriginalValue ? targetEbook.totalOriginalValue.toString() : (targetEbook.price * 1.5).toString());
       setCurrency(targetEbook.currency || 'INR');
       setPageCount(targetEbook.pageCount ? targetEbook.pageCount.toString() : '240');
@@ -250,6 +252,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setAuthor('');
       setCategory('Technology & Engineering');
       setPrice('499');
+      setOriginalPrice('499');
       setTotalOriginalValue('999');
       setCurrency('INR');
       setPageCount('220');
@@ -288,6 +291,15 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       }
     }
   }, [comboItems, publicationType]);
+
+  // Calculate discount for live display in admin form
+  const origPriceNum = Number(originalPrice);
+  const sellPriceNum = Number(price);
+  const hasValidDiscount = origPriceNum > 0 && sellPriceNum > 0 && origPriceNum >= sellPriceNum;
+  const discountAmount = hasValidDiscount ? origPriceNum - sellPriceNum : 0;
+  const discountPercent = hasValidDiscount && origPriceNum > 0 ? Math.round(((origPriceNum - sellPriceNum) / origPriceNum) * 100) : 0;
+  const showDiscount = hasValidDiscount && discountAmount > 0 && discountPercent > 0;
+  const showNoDiscount = hasValidDiscount && origPriceNum === sellPriceNum;
 
   if (!isOpen) return null;
 
@@ -690,6 +702,30 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       return;
     }
 
+    // Price validation
+    const origPrice = Number(originalPrice);
+    const sellPrice = Number(price);
+    if (!originalPrice.trim() || !price.trim()) {
+      setError('Please provide both Original Price and Selling Price');
+      setActiveTab('general');
+      return;
+    }
+    if (origPrice <= 0) {
+      setError('Original Price must be greater than 0');
+      setActiveTab('general');
+      return;
+    }
+    if (sellPrice <= 0) {
+      setError('Selling Price must be greater than 0');
+      setActiveTab('general');
+      return;
+    }
+    if (sellPrice > origPrice) {
+      setError('Selling Price cannot be greater than Original Price');
+      setActiveTab('general');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -700,6 +736,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
         author: author.trim() || 'Editorial Staff',
         category: category.trim(),
         price: Number(price),
+        originalPrice: Number(originalPrice),
         currency,
         publicationType,
         totalOriginalValue: publicationType === 'COMBO' ? Number(totalOriginalValue) : undefined,
@@ -1018,17 +1055,56 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-[#4A443E] uppercase tracking-wider mb-1">
+                    Original / Actual Price (₹ INR) *
+                  </label>
+                  <input
+                    id="input-ebook-original-price"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    value={originalPrice}
+                    onChange={(e) => setOriginalPrice(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-[#DCD5C9] rounded-lg focus:outline-none focus:border-[#8B2635] text-[#1A1817]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#4A443E] uppercase tracking-wider mb-1">
                     Selling Price (₹ INR) *
                   </label>
                   <input
                     id="input-ebook-price"
                     type="number"
-                    min="0"
+                    min="0.01"
+                    step="0.01"
                     required
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
                     className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-[#DCD5C9] rounded-lg focus:outline-none focus:border-[#8B2635] font-bold text-[#1A1817]"
                   />
+                </div>
+
+                {/* Live Discount Calculation Display */}
+                <div className="sm:col-span-3">
+                  <div className="p-3 bg-[#FAF8F5] border border-[#E8E2D9] rounded-xl">
+                    {showDiscount ? (
+                      <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+                        <span className="text-emerald-700 font-bold flex items-center gap-1">
+                          <Tag className="w-3.5 h-3.5" /> Save ₹{discountAmount.toFixed(2)} &nbsp;·&nbsp; {discountPercent}% OFF
+                        </span>
+                        <span className="text-[#736B63]">Customer pays: <strong className="text-[#1A1817]">₹{sellPriceNum.toFixed(2)}</strong></span>
+                      </div>
+                    ) : showNoDiscount ? (
+                      <div className="text-xs text-[#736B63] flex items-center gap-1">
+                        <span>No discount — customer pays: <strong className="text-[#1A1817]">₹{sellPriceNum.toFixed(2)}</strong></span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[#736B63]">
+                        Enter both prices to see discount calculation
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {publicationType === 'COMBO' ? (

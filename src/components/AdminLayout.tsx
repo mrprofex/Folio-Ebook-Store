@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { applySEO } from './SEO';
 import {
   LayoutDashboard,
   BookOpen,
@@ -32,6 +33,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  applySEO({
+    noindex: true,
+    title: 'Admin Dashboard'
+  });
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

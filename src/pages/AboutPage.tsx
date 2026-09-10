@@ -1,11 +1,22 @@
 import React from 'react';
 import { ArrowLeft, BookOpen, Mail, ShieldCheck, DownloadCloud, Heart } from 'lucide-react';
+import { applySEO } from '../components/SEO';
 
 interface AboutPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
+  applySEO({
+    title: 'About FOLIO',
+    description: 'FOLIO is an independent digital publishing imprint curating deep-dive engineering treatises, design principles, and business playbooks. Learn about our mission and team.',
+    canonical: '/about',
+    ogType: 'website',
+    breadcrumbs: [
+      { label: 'Home', href: '/' },
+      { label: 'About', href: '/about' }
+    ]
+  });
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <button

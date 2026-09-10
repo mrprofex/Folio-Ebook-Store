@@ -1,13 +1,139 @@
-import { Router, Response } from 'express';
+import { Router, Response as ExpressResponse } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
+import { v2 as cloudinary } from 'cloudinary';
 import { db } from '../db.js';
 import { authMiddleware, AuthRequest } from '../auth.js';
+import {
+  isSupabaseConfigured,
+  createSignedDownloadUrl,
+  fetchPdfFromSupabase
+} from '../supabase.js';
+
+const isCloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  !process.env.CLOUDINARY_CLOUD_NAME.includes('sample')
+);
+
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
 
 const router = Router();
 
-// Helper to generate a clean valid PDF document buffer on the fly with purchaser watermark
+function isSupabaseStoragePath(pdfUrl: string): boolean {
+  return pdfUrl.startsWith('ebooks/') || pdfUrl.startsWith('ebooks/');
+}
+
+function extractCloudinaryPublicId(url: string): string | null {
+  const match = url.match(/\/upload(?:\/v\d+)?\/(.+?)(?:\.[^.]+)?$/);
+  return match ? match[1] : null;
+}
+
+function extractCloudinaryResourceType(url: string): string {
+  const match = url.match(/res\.cloudinary\.com\/[^/]+\/([^/]+)\//);
+  return match ? match[1] : 'image';
+}
+
+async function streamSupabasePdf(storagePath: string, res: ExpressResponse, filename: string): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase not configured');
+  }
+
+  let signedUrl: string;
+  try {
+    signedUrl = await createSignedDownloadUrl(storagePath, 3600);
+  } catch (err) {
+    console.error('Error generating Supabase signed download URL:', err);
+    throw new Error('Failed to generate download link');
+  }
+
+  const externalRes = await fetchPdfFromSupabase(signedUrl);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const contentLength = externalRes.headers.get('content-length');
+  if (contentLength) {
+    res.setHeader('Content-Length', contentLength);
+  }
+  const webStream = externalRes.body;
+  if (webStream) {
+    const nodeStream = Readable.fromWeb(webStream as any);
+    nodeStream.pipe(res);
+  } else {
+    res.status(500).send('Empty PDF stream');
+  }
+}
+
+async function streamProtectedCloudinaryPdf(publicId: string, resourceType: string, res: ExpressResponse, filename: string): Promise<void> {
+  if (!isCloudinaryConfigured) {
+    throw new Error('Cloudinary not configured');
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME!;
+  const apiKey = process.env.CLOUDINARY_API_KEY!;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET!;
+  
+  // Use Admin API to fetch the authenticated resource
+  // For resources with resource_type=image, access_mode=authenticated, delivery_type=upload
+  const adminUrl = `https://api.cloudinary.com/v1_1/${cloudName}/resources/${resourceType}/upload/${publicId}`;
+  
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+  
+  let fetchRes: globalThis.Response;
+  try {
+    fetchRes = await fetch(adminUrl, {
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/pdf,*/*'
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching from Cloudinary Admin API:', err);
+    throw new Error('Failed to fetch PDF from Cloudinary');
+  }
+
+  if (!fetchRes.ok) {
+    const errorText = await fetchRes.text();
+    console.error(`Cloudinary Admin API fetch failed: ${fetchRes.status}`, errorText);
+    
+    // Fallback: try private_download_url for signed URL access
+    try {
+      const signedUrl = cloudinary.utils.private_download_url(
+        publicId,
+        'pdf',
+        { resource_type: resourceType, type: 'authenticated' }
+      );
+      
+      const fallbackRes = await fetch(signedUrl);
+      if (fallbackRes.ok) {
+        fetchRes = fallbackRes;
+      } else {
+        throw new Error(`Both Admin API and signed URL failed`);
+      }
+    } catch (fallbackErr) {
+      throw new Error(`Cloudinary download failed with status ${fetchRes.status}: ${errorText}`);
+    }
+  }
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const contentLength = fetchRes.headers.get('content-length');
+  if (contentLength) {
+    res.setHeader('Content-Length', contentLength);
+  }
+  const webStream = fetchRes.body;
+  if (webStream) {
+    const nodeStream = Readable.fromWeb(webStream as any);
+    nodeStream.pipe(res);
+  } else {
+    res.status(500).send('Empty PDF stream');
+  }
+}
 function generateEditorialPdfBuffer(ebook: { title: string; author: string; category: string; description: string; pageCount: number }, purchaserEmail: string): Buffer {
   const sanitizedTitle = ebook.title.replace(/[^\x20-\x7E]/g, '');
   const sanitizedAuthor = ebook.author.replace(/[^\x20-\x7E]/g, '');
@@ -107,7 +233,7 @@ startxref
 }
 
 // Protected Download Endpoint (Main Ebook, Combo Items, or Bonus Companion)
-router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const { id } = req.params;
     const isBonus = req.query.type === 'bonus';
@@ -162,46 +288,49 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
         }
       }
 
+      if (targetPdfUrl && isSupabaseStoragePath(targetPdfUrl)) {
+        try {
+          await streamSupabasePdf(targetPdfUrl, res, safeItemFileName);
+          return;
+        } catch (err) {
+          console.error('Error fetching Supabase PDF for combo item:', err);
+          return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
+        }
+      }
+
       if (targetPdfUrl && (targetPdfUrl.startsWith('http://') || targetPdfUrl.startsWith('https://'))) {
         try {
-          const externalRes = await fetch(targetPdfUrl);
-          if (!externalRes.ok) {
-            throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
-          }
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `attachment; filename="${safeItemFileName}"`);
-          const contentLength = externalRes.headers.get('content-length');
-          if (contentLength) {
-            res.setHeader('Content-Length', contentLength);
-          }
-          const webStream = externalRes.body;
-          if (webStream) {
-            const nodeStream = Readable.fromWeb(webStream as any);
-            nodeStream.pipe(res);
+          const publicId = extractCloudinaryPublicId(targetPdfUrl);
+          const resourceType = extractCloudinaryResourceType(targetPdfUrl);
+          if (publicId && isCloudinaryConfigured) {
+            await streamProtectedCloudinaryPdf(publicId, resourceType, res, safeItemFileName);
           } else {
-            res.status(500).send('Empty PDF stream');
+            const externalRes = await fetch(targetPdfUrl);
+            if (!externalRes.ok) {
+              throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+            }
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeItemFileName}"`);
+            const contentLength = externalRes.headers.get('content-length');
+            if (contentLength) {
+              res.setHeader('Content-Length', contentLength);
+            }
+            const webStream = externalRes.body;
+            if (webStream) {
+              const nodeStream = Readable.fromWeb(webStream as any);
+              nodeStream.pipe(res);
+            } else {
+              res.status(500).send('Empty PDF stream');
+            }
           }
           return;
         } catch (err) {
           console.error('Error fetching external PDF for combo item:', err);
+          return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
         }
       }
 
-      const itemBuffer = generateEditorialPdfBuffer(
-        {
-          title: item.title,
-          author: item.author,
-          category: `Combo Volume • ${ebook.category}`,
-          description: item.description || `Volume included in ${ebook.title}`,
-          pageCount: item.pageCount || 240
-        },
-        user.email
-      );
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeItemFileName}"`);
-      res.setHeader('Content-Length', itemBuffer.length);
-      return res.end(itemBuffer);
+      return res.status(404).send('PDF not available for this combo item.');
     }
 
     // B. BONUS EDITION DOWNLOAD
@@ -254,46 +383,49 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
         }
       }
 
+      if (targetPdfUrl && isSupabaseStoragePath(targetPdfUrl)) {
+        try {
+          await streamSupabasePdf(targetPdfUrl, res, safeBonusFileName);
+          return;
+        } catch (err) {
+          console.error('Error fetching Supabase PDF for bonus item:', err);
+          return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
+        }
+      }
+
       if (targetPdfUrl && (targetPdfUrl.startsWith('http://') || targetPdfUrl.startsWith('https://'))) {
         try {
-          const externalRes = await fetch(targetPdfUrl);
-          if (!externalRes.ok) {
-            throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
-          }
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `attachment; filename="${safeBonusFileName}"`);
-          const contentLength = externalRes.headers.get('content-length');
-          if (contentLength) {
-            res.setHeader('Content-Length', contentLength);
-          }
-          const webStream = externalRes.body;
-          if (webStream) {
-            const nodeStream = Readable.fromWeb(webStream as any);
-            nodeStream.pipe(res);
+          const publicId = extractCloudinaryPublicId(targetPdfUrl);
+          const resourceType = extractCloudinaryResourceType(targetPdfUrl);
+          if (publicId && isCloudinaryConfigured) {
+            await streamProtectedCloudinaryPdf(publicId, resourceType, res, safeBonusFileName);
           } else {
-            res.status(500).send('Empty PDF stream');
+            const externalRes = await fetch(targetPdfUrl);
+            if (!externalRes.ok) {
+              throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+            }
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeBonusFileName}"`);
+            const contentLength = externalRes.headers.get('content-length');
+            if (contentLength) {
+              res.setHeader('Content-Length', contentLength);
+            }
+            const webStream = externalRes.body;
+            if (webStream) {
+              const nodeStream = Readable.fromWeb(webStream as any);
+              nodeStream.pipe(res);
+            } else {
+              res.status(500).send('Empty PDF stream');
+            }
           }
           return;
         } catch (err) {
           console.error('Error fetching external PDF for bonus item:', err);
+          return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
         }
       }
 
-      const bonusBuffer = generateEditorialPdfBuffer(
-        {
-          title: `[BONUS COMPANION] ${bonusTitle}`,
-          author: bonusAuthor,
-          category: `Bonus Companion • ${ebook.category}`,
-          description: bonusDescription,
-          pageCount: targetPageCount
-        },
-        user.email
-      );
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeBonusFileName}"`);
-      res.setHeader('Content-Length', bonusBuffer.length);
-      return res.end(bonusBuffer);
+      return res.status(404).send('PDF not available for this bonus item.');
     }
 
     // C. STANDARD MAIN EBOOK / COMBO OVERVIEW DOWNLOAD
@@ -302,6 +434,7 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
     }
 
     const safeFileName = `${ebook.slug || 'ebook'}.pdf`;
+    const isPreviewPdf = ebook.pdfUrl && ebook.pdfUrl.includes('/pdf-content');
 
     // Check if local uploaded file exists
     if (ebook.pdfUrl && ebook.pdfUrl.startsWith('/uploads/')) {
@@ -313,38 +446,57 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
       }
     }
 
+    if (ebook.pdfUrl && isSupabaseStoragePath(ebook.pdfUrl)) {
+      try {
+        await streamSupabasePdf(ebook.pdfUrl, res, safeFileName);
+        return;
+      } catch (err) {
+        console.error('Error fetching Supabase PDF for main ebook:', err);
+        return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
+      }
+    }
+
     if (ebook.pdfUrl && (ebook.pdfUrl.startsWith('http://') || ebook.pdfUrl.startsWith('https://'))) {
       try {
-        const externalRes = await fetch(ebook.pdfUrl);
-        if (!externalRes.ok) {
-          throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
-        }
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
-        const contentLength = externalRes.headers.get('content-length');
-        if (contentLength) {
-          res.setHeader('Content-Length', contentLength);
-        }
-        const webStream = externalRes.body;
-        if (webStream) {
-          const nodeStream = Readable.fromWeb(webStream as any);
-          nodeStream.pipe(res);
+        const publicId = extractCloudinaryPublicId(ebook.pdfUrl) || ebook.pdfPublicId || null;
+        const resourceType = extractCloudinaryResourceType(ebook.pdfUrl) || ebook.cloudinaryResourceType || 'image';
+        if (publicId && isCloudinaryConfigured) {
+          await streamProtectedCloudinaryPdf(publicId, resourceType, res, safeFileName);
         } else {
-          res.status(500).send('Empty PDF stream');
+          const externalRes = await fetch(ebook.pdfUrl);
+          if (!externalRes.ok) {
+            throw new Error(`External PDF fetch failed with status ${externalRes.status}`);
+          }
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+          const contentLength = externalRes.headers.get('content-length');
+          if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+          }
+          const webStream = externalRes.body;
+          if (webStream) {
+            const nodeStream = Readable.fromWeb(webStream as any);
+            nodeStream.pipe(res);
+          } else {
+            res.status(500).send('Empty PDF stream');
+          }
         }
         return;
       } catch (err) {
         console.error('Error fetching external PDF for main ebook:', err);
+        return res.status(502).send('Unable to fetch PDF from storage. Please try again later.');
       }
     }
 
-    // Generate pristine watermarked PDF for delivery
-    const pdfBuffer = generateEditorialPdfBuffer(ebook, user.email);
+    if (isPreviewPdf) {
+      const pdfBuffer = generateEditorialPdfBuffer(ebook, user.email);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer);
+    }
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    return res.end(pdfBuffer);
+    return res.status(404).send('PDF not available for this publication.');
   } catch (err: any) {
     console.error('Error during secure PDF download:', err);
     return res.status(500).send('An error occurred during file delivery. Please try again or contact support.');
@@ -352,7 +504,7 @@ router.get('/:id/download', authMiddleware, async (req: AuthRequest, res: Respon
 });
 
 // Dedicated Bonus Download Alias
-router.get('/:id/bonus-download', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/bonus-download', authMiddleware, async (req: AuthRequest, res: ExpressResponse) => {
   req.query.type = 'bonus';
   const handler = router.stack.find(layer => layer.route?.path === '/:id/download')?.handle;
   if (handler) {
@@ -362,7 +514,7 @@ router.get('/:id/bonus-download', authMiddleware, async (req: AuthRequest, res: 
 });
 
 // PDF Preview sample route
-router.get('/:id/pdf-content', async (req, res) => {
+router.get('/:id/pdf-content', async (req, res: ExpressResponse) => {
   try {
     const { id } = req.params;
     const ebook = await db.findEbookById(id) || await db.findEbookBySlug(id);

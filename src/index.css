@@ -68,3 +68,172 @@
   }
 }
 
+/* ===== RESPONSIVE EBOOK GRID ===== */
+/* Mobile-first: 2 cards per row on small screens */
+.ebook-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* Tablet: 3 cards per row */
+@media (min-width: 640px) {
+  .ebook-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+/* Small desktop: 3 cards per row */
+@media (min-width: 768px) {
+  .ebook-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+/* Large desktop: 4 cards per row */
+@media (min-width: 1024px) {
+  .ebook-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+
+/* Extra large: 4 cards with more space */
+@media (min-width: 1280px) {
+  .ebook-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 24px;
+  }
+}
+
+/* ===== EBOOK CARD RESPONSIVE SIZING ===== */
+.ebook-card {
+  /* Ensure cards don't overflow on mobile */
+  min-width: 0;
+}
+
+/* Mobile card refinements */
+@media (max-width: 639px) {
+  .ebook-card {
+    /* Compact card on mobile */
+  }
+  
+  .ebook-card img {
+    /* Ensure cover images don't cause layout shift */
+    content-visibility: auto;
+  }
+}
+
+/* ===== MOBILE NAV IMPROVEMENTS ===== */
+@media (max-width: 639px) {
+  /* Ensure header doesn't cause horizontal scroll */
+  header {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  
+  /* Mobile drawer improvements */
+  #mobile-drawer-menu {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+/* ===== MOBILE EBOOK DETAIL PAGE ===== */
+@media (max-width: 1023px) {
+  /* Stack cover and details on tablet and mobile */
+  .ebook-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .ebook-cover-container {
+    max-width: 280px;
+    margin: 0 auto;
+  }
+}
+
+/* ===== TOUCH TARGET IMPROVEMENTS ===== */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[href],
+  input[type="button"],
+  input[type="submit"],
+  select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .ebook-card button {
+    min-height: 40px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+/* ===== LAYOUT SHIFT PREVENTION ===== */
+img[loading="lazy"] {
+  /* Reserve space for lazy-loaded images */
+  contain-intrinsic-size: 280px 420px;
+}
+
+/* ===== FOCUS STATES FOR ACCESSIBILITY ===== */
+:focus-visible {
+  outline: 2px solid #8B2635;
+  outline-offset: 2px;
+}
+
+/* Skip focus ring for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ===== REDUCE MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== TEXT CONTRAST ===== */
+.text-on-primary {
+  color: #1A1817;
+}
+
+.text-on-muted {
+  color: #5A534B;
+}
+
+/* ===== SEARCH FILTER BAR MOBILE ===== */
+@media (max-width: 639px) {
+  .search-filter-mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-filter-mobile > div:last-child {
+    width: 100%;
+  }
+}
+
+/* ===== CATEGORY PILLS MOBILE ===== */
+@media (max-width: 639px) {
+  .category-pills {
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  
+  .category-pills button {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+}

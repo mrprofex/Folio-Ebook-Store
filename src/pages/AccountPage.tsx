@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
 import { Purchase } from '../types';
+import { applySEO } from '../components/SEO';
 import {
   User as UserIcon,
   Mail,
@@ -27,6 +28,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
   const [newPassword, setNewPassword] = useState('');
   const [updating, setUpdating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    applySEO({
+      noindex: true,
+      title: 'Account Settings'
+    });
+  }, []);
 
   useEffect(() => {
     if (user) {

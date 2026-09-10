@@ -23,11 +23,11 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   totalResults
 }) => {
   return (
-    <div className="space-y-4 mb-8">
+    <div className="space-y-3 md:space-y-4 mb-6 md:mb-8">
       {/* Top Search Input & Sort Dropdown */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         {/* Search Bar */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 text-[#8C8276] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             id="input-catalog-search"
@@ -49,15 +49,16 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
         </div>
 
         {/* Sort Select */}
-        <div className="flex items-center gap-2 shrink-0">
-          <label htmlFor="select-catalog-sort" className="text-xs font-semibold text-[#736B63] flex items-center gap-1">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+          <label htmlFor="select-catalog-sort" className="text-xs font-semibold text-[#736B63] flex items-center gap-1 hidden sm:flex">
             <ArrowUpDown className="w-3.5 h-3.5" /> Sort:
           </label>
           <select
             id="select-catalog-sort"
             value={sort}
             onChange={(e) => onSortChange(e.target.value)}
-            className="bg-white border border-[#DCD5C9] rounded-xl px-3 py-2 text-xs font-medium text-[#1A1817] focus:outline-none focus:border-[#8B2635] cursor-pointer shadow-2xs"
+            className="bg-white border border-[#DCD5C9] rounded-xl px-3 py-2 text-xs font-medium text-[#1A1817] focus:outline-none focus:border-[#8B2635] cursor-pointer shadow-2xs w-full sm:w-auto min-w-[160px]"
+            aria-label="Sort catalog"
           >
             <option value="newest">Newest Releases</option>
             <option value="featured">Featured First</option>
@@ -68,12 +69,12 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
       </div>
 
       {/* Category Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none category-pills" role="group" aria-label="Category filters">
         <button
           id="btn-category-all"
           type="button"
           onClick={() => onCategoryChange('all')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
             category === 'all'
               ? 'bg-[#1A1817] text-white shadow-xs'
               : 'bg-[#EAE4D9] text-[#5A534B] hover:bg-[#DCD5C9]'
@@ -88,7 +89,7 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
             id={`btn-category-${cat.toLowerCase().replace(/[\s&]+/g, '-')}`}
             type="button"
             onClick={() => onCategoryChange(cat)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
               category === cat
                 ? 'bg-[#1A1817] text-white shadow-xs'
                 : 'bg-[#EAE4D9] text-[#5A534B] hover:bg-[#DCD5C9]'
@@ -110,7 +111,7 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
               onSearchChange('');
               onCategoryChange('all');
             }}
-            className="text-xs text-[#8B2635] hover:underline cursor-pointer"
+            className="text-xs text-[#8B2635] hover:underline cursor-pointer whitespace-nowrap"
           >
             Reset Filters
           </button>

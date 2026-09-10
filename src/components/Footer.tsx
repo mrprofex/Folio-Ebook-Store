@@ -7,10 +7,10 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   return (
-    <footer className="bg-[#1A1817] text-[#D5CEC5] border-t border-[#2D2A28] mt-24">
+    <footer className="bg-[#1A1817] text-[#D5CEC5] border-t border-[#2D2A28] mt-16">
       {/* Trust bar */}
-      <div className="border-b border-[#2D2A28] py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="border-b border-[#2D2A28] py-6 md:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#262321] text-[#E6C994] flex items-center justify-center shrink-0">
               <Lock className="w-5 h-5" />
@@ -44,10 +44,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
       </div>
 
       {/* Main Footer Links */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
           {/* Brand Info */}
-          <div className="md:col-span-2">
+          <div className="sm:col-span-2 md:col-span-2">
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-8 h-8 rounded bg-[#8B2635] text-[#FBF9F5] flex items-center justify-center">
                 <BookOpen className="w-4 h-4" />
@@ -158,7 +158,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         </div>
 
         {/* Bottom copyright */}
-        <div className="border-t border-[#2D2A28] mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#736B63]">
+        <div className="border-t border-[#2D2A28] mt-8 md:mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#736B63]">
           <p>© {new Date().getFullYear()} FOLIO Digital Store. All rights reserved.</p>
           <p className="mt-2 sm:mt-0 flex items-center gap-2">
             <span>Powered by Razorpay & Cloud Storage</span>

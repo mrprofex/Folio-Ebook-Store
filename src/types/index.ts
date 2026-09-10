@@ -117,7 +117,8 @@ export interface Ebook {
   description: string;
   author: string;
   category: string;
-  price: number;
+  price: number; // Selling price (actual amount charged)
+  originalPrice: number; // Original/reference price (strikethrough)
   currency: string;
   coverImageUrl: string;
   coverPublicId?: string;
@@ -137,6 +138,9 @@ export interface Ebook {
   publicationType?: PublicationType;
   comboItems?: ComboItem[];
   totalOriginalValue?: number; // Sum of standalone item prices
+
+  // Discount helper (calculated)
+  discountPercentage?: number;
 
   // Bonus Ebook / Companion Fields (Supports multiple bonus volumes)
   hasBonus?: boolean;
@@ -223,6 +227,7 @@ export interface Purchase {
 export interface DashboardStats {
   totalEarnings: number;
   todayEarnings: number;
+  todayPurchases: number;
   totalPurchases: number;
   totalUsers: number;
   totalEbooks: number;

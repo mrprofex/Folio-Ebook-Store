@@ -208,12 +208,44 @@ export const AdminEbooksPage: React.FC<AdminEbooksPageProps> = ({
                     {/* Price */}
                     <td className="py-3 px-4 font-bold text-[#1A1817]">
                       <div>
-                        <span>{ebook.currency === 'INR' ? '₹' : '$'}{ebook.price}</span>
-                        {ebook.publicationType === 'COMBO' && ebook.totalOriginalValue && (
-                          <span className="block text-[10px] text-[#9E9589] line-through font-normal">
-                            Val: ₹{ebook.totalOriginalValue}
-                          </span>
-                        )}
+                        {(() => {
+                          const isCombo = ebook.publicationType === 'COMBO';
+                          const originalPrice = ebook.originalPrice || ebook.price;
+                          const sellingPrice = ebook.price;
+                          const hasDiscount = originalPrice > sellingPrice;
+                          const discountPercent = hasDiscount
+                            ? Math.round(((originalPrice - sellingPrice) / originalPrice) * 100)
+                            : (isCombo && ebook.totalOriginalValue && ebook.totalOriginalValue > ebook.price
+                              ? Math.round(((ebook.totalOriginalValue - ebook.price) / ebook.totalOriginalValue) * 100)
+                              : 0);
+
+                          if (hasDiscount) {
+                            return (
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-[#9E9589] line-through">
+                                  {ebook.currency === 'INR' ? '₹' : '$'}{originalPrice}
+                                </span>
+                                <span className="text-sm">{ebook.currency === 'INR' ? '₹' : '$'}{sellingPrice}</span>
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                                  {discountPercent}% OFF
+                                </span>
+                              </div>
+                            );
+                          } else if (isCombo && ebook.totalOriginalValue && ebook.totalOriginalValue > ebook.price) {
+                            return (
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span>{ebook.currency === 'INR' ? '₹' : '$'}{sellingPrice}</span>
+                                <span className="block text-[10px] text-[#9E9589] line-through font-normal">
+                                  Val: ₹{ebook.totalOriginalValue}
+                                </span>
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                                  {discountPercent}% OFF
+                                </span>
+                              </div>
+                            );
+                          }
+                          return <span>{ebook.currency === 'INR' ? '₹' : '$'}{sellingPrice}</span>;
+                        })()}
                       </div>
                     </td>
 

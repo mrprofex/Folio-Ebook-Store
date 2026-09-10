@@ -96,6 +96,7 @@ function mapEbook(r: any): Ebook {
     author: r.author,
     category: r.category,
     price: Number(r.price),
+    originalPrice: Number(r.original_price ?? r.price),
     currency: r.currency,
     coverImageUrl: r.cover_image_url,
     coverPublicId: r.cover_public_id ?? undefined,
@@ -187,7 +188,7 @@ function mapCouponUsage(r: any): CouponUsage {
 // camelCase field -> snake_case column maps for dynamic updates
 const EBOOK_COLS: Record<string, string> = {
   title: 'title', slug: 'slug', description: 'description', author: 'author', category: 'category',
-  price: 'price', currency: 'currency', coverImageUrl: 'cover_image_url', coverPublicId: 'cover_public_id',
+  price: 'price', originalPrice: 'original_price', currency: 'currency', coverImageUrl: 'cover_image_url', coverPublicId: 'cover_public_id',
   pdfUrl: 'pdf_url', pdfPublicId: 'pdf_public_id', cloudinaryResourceType: 'cloudinary_resource_type',
   fileSize: 'file_size', pageCount: 'page_count', featured: 'featured', published: 'published',
   sampleChapter: 'sample_chapter', publicationType: 'publication_type', comboItems: 'combo_items',
@@ -394,9 +395,10 @@ class Database {
   async createEbook(data: Omit<Ebook, 'id' | 'createdAt' | 'updatedAt' | 'downloadCount'>): Promise<Ebook> {
     const id = genId('ebk');
     const now = new Date().toISOString();
+    const originalPrice = data.originalPrice ?? data.price;
     await pool.query(
       `INSERT INTO ebooks (
-        id, title, slug, description, author, category, price, currency, cover_image_url,
+        id, title, slug, description, author, category, price, original_price, currency, cover_image_url,
         cover_public_id, pdf_url, pdf_public_id, cloudinary_resource_type, file_size, page_count,
         featured, published, download_count, sample_chapter, created_at, updated_at,
         publication_type, combo_items, total_original_value, has_bonus, bonus_items,
@@ -404,10 +406,10 @@ class Database {
         bonus_pdf_url, bonus_page_count, bonus_file_size
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-        $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34
+        $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
       )`,
       [
-        id, data.title, data.slug, data.description, data.author, data.category, data.price, data.currency || 'INR',
+        id, data.title, data.slug, data.description, data.author, data.category, data.price, originalPrice, data.currency || 'INR',
         data.coverImageUrl, data.coverPublicId ?? null, data.pdfUrl, data.pdfPublicId ?? null, data.cloudinaryResourceType ?? null,
         data.fileSize, data.pageCount, data.featured ?? false, data.published ?? false, 0, data.sampleChapter ?? null,
         now, now,         data.publicationType || 'SINGLE', jsonVal(data.comboItems), data.totalOriginalValue ?? null,
@@ -1116,7 +1118,7 @@ class Database {
 
   // --- ANALYTICS DASHBOARD ---
 
-  async getDashboardStats(): Promise<DashboardStats> {
+async getDashboardStats(): Promise<DashboardStats> {
     const now = new Date().toISOString();
 
     const totalRes = await pool.query(
@@ -1125,11 +1127,29 @@ class Database {
     const totalPurchases = totalRes.rows[0].cnt;
     const totalEarnings = Number(totalRes.rows[0].revenue);
 
+    // Today's Sales in IST (Asia/Kolkata)
+    // IST is UTC+5:30. Compute today's date in IST, then get midnight IST as UTC.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const nowUtc = new Date();
+    // Get current time in IST by adding offset
+    const istNow = new Date(nowUtc.getTime() + IST_OFFSET_MS);
+    // Get the date components in IST
+    const istYear = istNow.getUTCFullYear();
+    const istMonth = istNow.getUTCMonth();
+    const istDate = istNow.getUTCDate();
+    // Create midnight IST of today (which is 18:30 UTC of previous day)
+    const todayStartIST = new Date(Date.UTC(istYear, istMonth, istDate, 0, 0, 0, 0) - IST_OFFSET_MS);
+    // End is midnight IST of tomorrow
+    const todayEndIST = new Date(Date.UTC(istYear, istMonth, istDate + 1, 0, 0, 0, 0) - IST_OFFSET_MS);
+    const todayStartUTC = todayStartIST.toISOString();
+    const todayEndUTC = todayEndIST.toISOString();
+
     const todayRes = await pool.query(
       `SELECT COUNT(*)::int AS cnt, COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue FROM purchases 
        WHERE payment_status = 'SUCCESS'
-       AND purchased_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone
-       AND purchased_at < ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata')::timestamp with time zone`
+       AND purchased_at >= $1
+       AND purchased_at < $2`,
+      [todayStartUTC, todayEndUTC]
     );
     const todayPurchases = todayRes.rows[0].cnt;
     const todayEarnings = Number(todayRes.rows[0].revenue);
@@ -1215,42 +1235,57 @@ class Database {
       }
     }
 
-    // Revenue by month (last 6 months)
-    const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-    const currentMonth = new Date().getMonth();
-    const revenueByMonth = months.map((m, monthIndex) => {
-      const targetMonth = ((currentMonth - 5 + monthIndex) % 12 + 12) % 12;
-      const targetYear = new Date().getFullYear() - (currentMonth < 5 && monthIndex >= currentMonth ? 1 : 0);
-      return {
-        month: m,
+    // Revenue by month (last 6 months) in IST
+    // Build last 6 months in IST using already declared istNow
+    const revenueByMonth: { month: string; revenue: number; sales: number }[] = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 5; i >= 0; i--) {
+      const targetMonth = (istNow.getUTCMonth() - i + 12) % 12;
+      const targetYear = istNow.getUTCFullYear() - (istNow.getUTCMonth() - i < 0 ? 1 : 0);
+      revenueByMonth.push({
+        month: monthNames[targetMonth],
         revenue: 0,
         sales: 0
-      };
-    });
+      });
+    }
 
+    // Query using IST timezone for proper month grouping
     const monthlyRes = await pool.query(
-      `SELECT EXTRACT(MONTH FROM purchased_at)::int AS month, 
-              COUNT(*)::int AS sales, 
-              COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue 
+      `SELECT 
+         EXTRACT(MONTH FROM (purchased_at AT TIME ZONE 'Asia/Kolkata'))::int AS month,
+         EXTRACT(YEAR FROM (purchased_at AT TIME ZONE 'Asia/Kolkata'))::int AS year,
+         COUNT(*)::int AS sales, 
+         COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue 
        FROM purchases 
        WHERE payment_status = 'SUCCESS' 
-       AND purchased_at >= NOW() - INTERVAL '6 months'
-       GROUP BY EXTRACT(MONTH FROM purchased_at)`
+       AND purchased_at >= (timezone('Asia/Kolkata', now())::date - INTERVAL '5 months') AT TIME ZONE 'Asia/Kolkata'
+       GROUP BY year, month
+       ORDER BY year, month`
     );
+    
+    // Map query results to revenueByMonth array
     for (const row of monthlyRes.rows) {
-      const idx = (row.month - currentMonth + 60) % 12;
-      if (idx >= 0 && idx < 6) {
-        revenueByMonth[idx] = {
-          month: revenueByMonth[idx].month,
-          revenue: Number(row.revenue),
-          sales: row.sales
-        };
+      const monthIdx = (row.month - 1 + 12 * (row.year - istNow.getUTCFullYear()) + 6) % 6;
+      // Match the month to our revenueByMonth array
+      for (let i = 0; i < revenueByMonth.length; i++) {
+        const targetMonth = (istNow.getUTCMonth() - (5 - i) + 12) % 12;
+        const targetYear = istNow.getUTCFullYear() - (istNow.getUTCMonth() - (5 - i) < 0 ? 1 : 0);
+        if (targetMonth === (row.month - 1) && targetYear === row.year) {
+          revenueByMonth[i] = {
+            month: revenueByMonth[i].month,
+            revenue: Number(row.revenue),
+            sales: row.sales
+          };
+          break;
+        }
       }
     }
 
     return {
       totalEarnings,
       todayEarnings,
+      todayPurchases,
       totalPurchases,
       totalUsers: usersCount,
       totalEbooks: ebooksCount,

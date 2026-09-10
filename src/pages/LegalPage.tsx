@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowLeft, ShieldCheck, Mail, FileText, RefreshCw } from 'lucide-react';
+import { applySEO } from '../components/SEO';
 
 interface LegalPageProps {
   section: 'terms' | 'privacy' | 'refunds' | 'contact' | 'delivery';
@@ -7,6 +8,32 @@ interface LegalPageProps {
 }
 
 export const LegalPage: React.FC<LegalPageProps> = ({ section, onNavigate }) => {
+  const titles: Record<string, string> = {
+    terms: 'Terms of Service & Digital License',
+    privacy: 'Privacy & Security Policy',
+    refunds: 'Digital Goods Refund Policy',
+    contact: 'Contact Editorial & Support',
+    delivery: 'Digital Delivery Policy'
+  };
+  const descriptions: Record<string, string> = {
+    terms: 'Read FOLIO\'s terms of service and digital license agreement for ebook purchases.',
+    privacy: 'Learn how FOLIO protects your data and processes secure payments.',
+    refunds: 'FOLIO\'s refund policy for defective or corrupt digital ebook files.',
+    contact: 'Contact FOLIO support for reader inquiries and author submissions.',
+    delivery: 'Learn about FOLIO\'s instant digital delivery process and lifetime access.'
+  };
+
+  applySEO({
+    title: titles[section] || 'Legal',
+    description: descriptions[section] || 'Legal information for FOLIO digital store.',
+    canonical: `/${section === 'terms-of-service' ? 'terms' : section === 'privacy-policy' ? 'privacy-policy' : section}`,
+    ogType: 'website',
+    noindex: false,
+    breadcrumbs: [
+      { label: 'Home', href: '/' },
+      { label: titles[section] || 'Legal', href: `/${section}` }
+    ]
+  });
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <button

@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /login
+Disallow: /register
+Disallow: /account
+Disallow: /dashboard
+Disallow: /checkout
+Disallow: /payment
+Disallow: /diagnostic
+Disallow: /_next/
+Disallow: /uploads/
+
+Sitemap: https://folio-ebook.vercel.app/sitemap.xml
+Sitemap: https://folio-ebook.vercel.app/api/sitemap.xml

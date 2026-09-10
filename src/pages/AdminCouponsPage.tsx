@@ -55,7 +55,7 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('folio_auth_token');
+      const token = localStorage.getItem('ebook_store_auth_token');
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})

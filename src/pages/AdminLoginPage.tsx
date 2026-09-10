@@ -1,4 +1,5 @@
 import React from 'react';
+import { applySEO } from '../components/SEO';
 
 interface AdminLoginPageProps {
   adminEmailInput: string;
@@ -27,6 +28,12 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   onSubmit,
   onReturnToStore
 }) => {
+  React.useEffect(() => {
+    applySEO({
+      noindex: true,
+      title: 'Admin Login'
+    });
+  }, []);
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#F4EFE6] flex items-center justify-center p-6">

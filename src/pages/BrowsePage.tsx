@@ -3,6 +3,7 @@ import { Ebook } from '../types';
 import { apiRequest } from '../lib/api';
 import { EbookCard } from '../components/EbookCard';
 import { SearchFilterBar } from '../components/SearchFilterBar';
+import { applySEO } from '../components/SEO';
 import { BookOpen, Sparkles } from 'lucide-react';
 
 interface BrowsePageProps {
@@ -24,6 +25,19 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
   const [category, setCategory] = useState(initialCategory);
   const [sort, setSort] = useState(initialSort);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    applySEO({
+      title: 'Buy Ebooks Online | Folio E-Book Store',
+      description: 'Browse our curated catalog of affordable digital ebooks. Software engineering, self-help, business, technology & educational ebooks. Instant PDF download, lifetime access.',
+      canonical: '/ebooks',
+      ogType: 'website',
+      breadcrumbs: [
+        { label: 'Home', href: '/' },
+        { label: 'Ebooks', href: '/ebooks' }
+      ]
+    });
+  }, []);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -63,17 +77,17 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
   }, [search, category, sort]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 md:py-12">
       {/* Page Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <span className="text-xs font-semibold uppercase tracking-widest text-[#8B2635] block mb-1">
           Catalog & Publications
         </span>
-        <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#1A1817]">
+        <h1 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-[#1A1817]">
           Explore Ebooks
         </h1>
-        <p className="text-sm text-[#736B63] mt-2 max-w-xl">
-          Discover comprehensive digital guides across software engineering, typography, business architecture, and timeless philosophy.
+        <p className="text-sm md:text-base text-[#736B63] mt-2 max-w-xl">
+          Discover comprehensive digital guides across software engineering, self-help, business architecture, technology, and timeless philosophy.
         </p>
       </div>
 
@@ -91,11 +105,11 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
 
       {/* Catalog Content */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="ebook-grid">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="bg-white border border-[#E8E2D9] rounded-xl overflow-hidden animate-pulse">
-              <div className="w-full aspect-[3/4] bg-[#EAE4D9]"></div>
-              <div className="p-5 space-y-3">
+              <div className="w-full aspect-[2/3] bg-[#EAE4D9]"></div>
+              <div className="p-4 space-y-2.5">
                 <div className="h-3 bg-[#EAE4D9] rounded w-1/3"></div>
                 <div className="h-4 bg-[#EAE4D9] rounded w-3/4"></div>
                 <div className="h-3 bg-[#EAE4D9] rounded w-full"></div>
@@ -105,7 +119,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
           ))}
         </div>
       ) : ebooks.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="ebook-grid">
           {ebooks.map((ebook) => (
             <EbookCard
               key={ebook.id}
@@ -117,14 +131,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
         </div>
       ) : (
         /* Empty State */
-        <div className="text-center py-16 px-4 bg-white border border-[#E8E2D9] rounded-2xl max-w-lg mx-auto shadow-xs">
-          <div className="w-12 h-12 rounded-full bg-[#F0EBE1] text-[#736B63] flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-6 h-6" />
+        <div className="text-center py-12 md:py-16 px-4 bg-white border border-[#E8E2D9] rounded-2xl max-w-lg mx-auto shadow-xs">
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#F0EBE1] text-[#736B63] flex items-center justify-center mx-auto mb-3">
+            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
           </div>
-          <h3 className="font-serif text-lg font-bold text-[#1A1817] mb-1">
+          <h3 className="font-serif text-base md:text-lg font-bold text-[#1A1817] mb-1">
             No publications found
           </h3>
-          <p className="text-xs text-[#736B63] mb-6">
+          <p className="text-xs sm:text-sm text-[#736B63] mb-5">
             We couldn't find any ebooks matching your query. Try broadening your keywords or resetting category filters.
           </p>
           <button

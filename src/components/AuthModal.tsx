@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { applySEO } from './SEO';
 import { X, BookOpen, Mail, Lock, User } from 'lucide-react';
 import { GoogleLoginButton } from './GoogleLoginButton';
 
@@ -18,6 +19,15 @@ export const AuthModal: React.FC = () => {
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
+
+  React.useEffect(() => {
+    if (isAuthModalOpen) {
+      applySEO({
+        noindex: true,
+        title: authModalMode === 'login' ? 'Sign In' : 'Create Account'
+      });
+    }
+  }, [isAuthModalOpen, authModalMode]);
 
   const handleGoogleSuccess = useCallback(
     async (idToken: string) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Purchase } from '../types';
 import { apiRequest, getStoredToken } from '../lib/api';
+import { applySEO } from '../components/SEO';
 import { CheckCircle2, Download, ShoppingBag, ArrowRight, ShieldCheck, FileText, Package, Gift, Ticket } from 'lucide-react';
 
 interface PurchaseSuccessPageProps {
@@ -16,6 +17,13 @@ export const PurchaseSuccessPage: React.FC<PurchaseSuccessPageProps> = ({
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    applySEO({
+      noindex: true,
+      title: 'Purchase Successful'
+    });
+  }, []);
 
   useEffect(() => {
     try {
