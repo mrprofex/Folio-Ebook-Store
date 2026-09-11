@@ -195,6 +195,7 @@ router.post('/ebooks', async (req: AuthRequest, res: Response) => {
             author: (raw.author || author || 'Editorial Staff').trim(),
             category: (raw.category || category || 'Technology & Engineering').trim(),
             price: raw.price !== undefined ? Number(raw.price) : 399,
+            originalPrice: raw.price !== undefined ? Number(raw.price) : 399,
             currency: currency || 'INR',
             publicationType: 'SINGLE',
             coverImageUrl: raw.coverImageUrl || coverImageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80',
@@ -281,6 +282,7 @@ router.post('/ebooks', async (req: AuthRequest, res: Response) => {
             author: (raw.author || author || 'Editorial Staff').trim(),
             category: (raw.category || category || 'General').trim(),
             price: raw.price !== undefined ? Number(raw.price) : 299,
+            originalPrice: raw.price !== undefined ? Number(raw.price) : 299,
             currency: currency || 'INR',
             publicationType: 'SINGLE',
             coverImageUrl: raw.coverImageUrl || coverImageUrl || 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
@@ -318,6 +320,7 @@ router.post('/ebooks', async (req: AuthRequest, res: Response) => {
       author: (author || 'Editorial Staff').trim(),
       category: (category || 'General').trim(),
       price: numPrice,
+      originalPrice: numPrice,
       currency: currency || 'INR',
       publicationType: cleanPublicationType,
       totalOriginalValue: totalOriginalValue ? Number(totalOriginalValue) : undefined,
@@ -381,6 +384,9 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
     if (updates.price !== undefined) {
       updates.price = Number(updates.price);
     }
+    if (updates.originalPrice !== undefined) {
+      updates.originalPrice = Number(updates.originalPrice);
+    }
     if (updates.totalOriginalValue !== undefined) {
       updates.totalOriginalValue = Number(updates.totalOriginalValue);
     }
@@ -443,43 +449,45 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
         // Custom volume: update existing or create new real ebook record
         const customSlug = `${slugify(raw.title || 'volume')}-${Date.now().toString().slice(-4)}`;
         let customEbookId = raw.ebookId;
-        if (customEbookId) {
-          const existingCustom = await db.findEbookById(customEbookId);
-          if (existingCustom) {
-            await db.updateEbook(customEbookId, {
-              title: (raw.title || existingCustom.title).trim(),
-              author: (raw.author || existingCustom.author || updates.author || existing.author || 'Author').trim(),
-              category: (raw.category || existingCustom.category || updates.category || existing.category || 'General').trim(),
-              description: (raw.description || existingCustom.description).trim(),
-              price: raw.price !== undefined ? Number(raw.price) : existingCustom.price,
-              coverImageUrl: raw.coverImageUrl || existingCustom.coverImageUrl,
-              pdfUrl: raw.pdfUrl || existingCustom.pdfUrl,
-              pageCount: raw.pageCount ? Number(raw.pageCount) : existingCustom.pageCount,
-              fileSize: raw.fileSize || existingCustom.fileSize
-            });
-          } else {
-            customEbookId = undefined;
+if (customEbookId) {
+            const existingCustom = await db.findEbookById(customEbookId);
+            if (existingCustom) {
+              await db.updateEbook(customEbookId, {
+                title: (raw.title || existingCustom.title).trim(),
+                author: (raw.author || existingCustom.author || updates.author || existing.author || 'Author').trim(),
+                category: (raw.category || existingCustom.category || updates.category || existing.category || 'General').trim(),
+                description: (raw.description || existingCustom.description).trim(),
+                price: raw.price !== undefined ? Number(raw.price) : existingCustom.price,
+                originalPrice: raw.price !== undefined ? Number(raw.price) : existingCustom.originalPrice,
+                coverImageUrl: raw.coverImageUrl || existingCustom.coverImageUrl,
+                pdfUrl: raw.pdfUrl || existingCustom.pdfUrl,
+                pageCount: raw.pageCount ? Number(raw.pageCount) : existingCustom.pageCount,
+                fileSize: raw.fileSize || existingCustom.fileSize
+              });
+            } else {
+              customEbookId = undefined;
+            }
           }
-        }
-        if (!customEbookId) {
-          const created = await db.createEbook({
-            title: (raw.title || 'Custom Volume').trim(),
-            slug: customSlug,
-            description: (raw.description || 'Custom volume in combo.').trim(),
-            author: (raw.author || updates.author || existing.author || 'Editorial Staff').trim(),
-            category: (raw.category || updates.category || existing.category || 'Technology & Engineering').trim(),
-            price: raw.price !== undefined ? Number(raw.price) : 399,
-            currency: updates.currency || existing.currency || 'INR',
-            publicationType: 'SINGLE',
-            coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80',
-             pdfUrl: raw.pdfUrl,
-            pageCount: Number(raw.pageCount) || 150,
-            fileSize: raw.fileSize || '10 MB',
-            featured: false,
-            published: false
-          });
-          customEbookId = created.id;
-        }
+if (!customEbookId) {
+            const created = await db.createEbook({
+              title: (raw.title || 'Custom Volume').trim(),
+              slug: customSlug,
+              description: (raw.description || 'Custom volume in combo.').trim(),
+              author: (raw.author || updates.author || existing.author || 'Editorial Staff').trim(),
+              category: (raw.category || updates.category || existing.category || 'Technology & Engineering').trim(),
+              price: raw.price !== undefined ? Number(raw.price) : 399,
+              originalPrice: raw.price !== undefined ? Number(raw.price) : 399,
+              currency: updates.currency || existing.currency || 'INR',
+              publicationType: 'SINGLE',
+              coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80',
+               pdfUrl: raw.pdfUrl,
+              pageCount: Number(raw.pageCount) || 150,
+              fileSize: raw.fileSize || '10 MB',
+              featured: false,
+              published: false
+            });
+            customEbookId = created.id;
+          }
 
         cleanComboItems.push({
           id: raw.id || `citem-${Date.now()}-${idx}`,
@@ -527,43 +535,45 @@ router.put('/ebooks/:id', async (req: AuthRequest, res: Response) => {
         // Custom bonus: update existing or create real ebook record
         const customSlug = `${slugify(raw.title || 'bonus-guide')}-${Date.now().toString().slice(-4)}`;
         let customBonusEbookId = raw.ebookId;
-        if (customBonusEbookId) {
-          const existingBonus = await db.findEbookById(customBonusEbookId);
-          if (existingBonus) {
-            await db.updateEbook(customBonusEbookId, {
-              title: (raw.title || existingBonus.title).trim(),
-              author: (raw.author || existingBonus.author || updates.author || existing.author || 'Author').trim(),
-              category: (raw.category || existingBonus.category || updates.category || existing.category || 'General').trim(),
-              description: (raw.description || existingBonus.description).trim(),
-              price: raw.price !== undefined ? Number(raw.price) : existingBonus.price,
-              coverImageUrl: raw.coverImageUrl || existingBonus.coverImageUrl,
-              pdfUrl: raw.pdfUrl || existingBonus.pdfUrl,
-              pageCount: raw.pageCount ? Number(raw.pageCount) : existingBonus.pageCount,
-              fileSize: raw.fileSize || existingBonus.fileSize
-            });
-          } else {
-            customBonusEbookId = undefined;
+if (customBonusEbookId) {
+            const existingBonus = await db.findEbookById(customBonusEbookId);
+            if (existingBonus) {
+              await db.updateEbook(customBonusEbookId, {
+                title: (raw.title || existingBonus.title).trim(),
+                author: (raw.author || existingBonus.author || updates.author || existing.author || 'Author').trim(),
+                category: (raw.category || existingBonus.category || updates.category || existing.category || 'General').trim(),
+                description: (raw.description || existingBonus.description).trim(),
+                price: raw.price !== undefined ? Number(raw.price) : existingBonus.price,
+                originalPrice: raw.price !== undefined ? Number(raw.price) : existingBonus.originalPrice,
+                coverImageUrl: raw.coverImageUrl || existingBonus.coverImageUrl,
+                pdfUrl: raw.pdfUrl || existingBonus.pdfUrl,
+                pageCount: raw.pageCount ? Number(raw.pageCount) : existingBonus.pageCount,
+                fileSize: raw.fileSize || existingBonus.fileSize
+              });
+            } else {
+              customBonusEbookId = undefined;
+            }
           }
-        }
-        if (!customBonusEbookId) {
-          const created = await db.createEbook({
-            title: (raw.title || 'Bonus Companion Guide').trim(),
-            slug: customSlug,
-            description: (raw.description || 'Exclusive digital companion guide.').trim(),
-            author: (raw.author || updates.author || existing.author || 'Editorial Staff').trim(),
-            category: (raw.category || updates.category || existing.category || 'General').trim(),
-            price: raw.price !== undefined ? Number(raw.price) : 299,
-            currency: updates.currency || existing.currency || 'INR',
-            publicationType: 'SINGLE',
-            coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
-             pdfUrl: raw.pdfUrl,
-            pageCount: Number(raw.pageCount) || 50,
-            fileSize: raw.fileSize || '5.0 MB',
-            featured: false,
-            published: false
-          });
-          customBonusEbookId = created.id;
-        }
+if (!customBonusEbookId) {
+            const created = await db.createEbook({
+              title: (raw.title || 'Bonus Companion Guide').trim(),
+              slug: customSlug,
+              description: (raw.description || 'Exclusive digital companion guide.').trim(),
+              author: (raw.author || updates.author || existing.author || 'Editorial Staff').trim(),
+              category: (raw.category || updates.category || existing.category || 'General').trim(),
+              price: raw.price !== undefined ? Number(raw.price) : 299,
+              originalPrice: raw.price !== undefined ? Number(raw.price) : 299,
+              currency: updates.currency || existing.currency || 'INR',
+              publicationType: 'SINGLE',
+              coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
+               pdfUrl: raw.pdfUrl,
+              pageCount: Number(raw.pageCount) || 50,
+              fileSize: raw.fileSize || '5.0 MB',
+              featured: false,
+              published: false
+            });
+            customBonusEbookId = created.id;
+          }
 
         cleanBonusItems.push({
           id: raw.id || `bitem-${Date.now()}-${idx}`,

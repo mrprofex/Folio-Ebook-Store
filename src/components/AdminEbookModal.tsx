@@ -22,7 +22,8 @@ import {
   ChevronUp,
   ChevronDown,
   FolderTree,
-  ExternalLink
+  ExternalLink,
+  Tag
 } from 'lucide-react';
 
 interface AdminEbookModalProps {
@@ -292,12 +293,14 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
     }
   }, [comboItems, publicationType]);
 
-  // Calculate discount for live display in admin form
-  const origPriceNum = Number(originalPrice);
-  const sellPriceNum = Number(price);
-  const hasValidDiscount = origPriceNum > 0 && sellPriceNum > 0 && origPriceNum >= sellPriceNum;
+  // Calculate discount for live display in admin form - robust against invalid/empty input during typing
+  const origPriceNum = typeof originalPrice === 'string' && originalPrice.trim() !== '' ? Number(originalPrice) : NaN;
+  const sellPriceNum = typeof price === 'string' && price.trim() !== '' ? Number(price) : NaN;
+  const isOrigValid = Number.isFinite(origPriceNum) && origPriceNum > 0;
+  const isSellValid = Number.isFinite(sellPriceNum) && sellPriceNum > 0;
+  const hasValidDiscount = isOrigValid && isSellValid && origPriceNum >= sellPriceNum;
   const discountAmount = hasValidDiscount ? origPriceNum - sellPriceNum : 0;
-  const discountPercent = hasValidDiscount && origPriceNum > 0 ? Math.round(((origPriceNum - sellPriceNum) / origPriceNum) * 100) : 0;
+  const discountPercent = hasValidDiscount ? Math.round(((origPriceNum - sellPriceNum) / origPriceNum) * 100) : 0;
   const showDiscount = hasValidDiscount && discountAmount > 0 && discountPercent > 0;
   const showNoDiscount = hasValidDiscount && origPriceNum === sellPriceNum;
 
