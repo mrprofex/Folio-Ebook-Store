@@ -166,32 +166,15 @@ async function uploadToCloudinaryUnsigned(
 // Upload endpoint (Admin only)
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
-    console.log('[UPLOAD] === REQUEST START ===');
-    console.log('[UPLOAD] Cloudinary configured:', isCloudinaryConfigured);
-    console.log('[UPLOAD] Supabase configured:', isSupabaseConfigured);
-    console.log('[UPLOAD] SUPABASE_URL exists:', Boolean(process.env.SUPABASE_URL));
-    console.log('[UPLOAD] SUPABASE_SECRET_KEY exists:', Boolean(process.env.SUPABASE_SECRET_KEY));
-
     if (!req.file) {
-      console.log('[UPLOAD] ERROR: No file in request');
       return res.status(400).json({ error: 'NO_FILE', message: 'No file was uploaded' });
     }
-
-    console.log('[UPLOAD] File received:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      fieldname: req.file.fieldname
-    });
 
     // Validate file type
     const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
     const isImage = req.file.mimetype.startsWith('image/');
 
-    console.log('[UPLOAD] File type check:', { isPdf, isImage, mimetype: req.file.mimetype });
-
     if (!isPdf && !isImage) {
-      console.log('[UPLOAD] Invalid file type:', req.file.mimetype);
       return res.status(400).json({
         error: 'INVALID_FILE_TYPE',
         message: 'Only PDF documents and images are allowed.'
@@ -201,7 +184,6 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
     // Handle PDF uploads via Supabase
     if (isPdf) {
       if (!isSupabaseConfigured) {
-        console.log('[UPLOAD] Supabase not configured for PDF upload');
         return res.status(500).json({
           error: 'SUPABASE_NOT_CONFIGURED',
           message: 'Supabase is required for PDF uploads. Please configure SUPABASE_URL and SUPABASE_SECRET_KEY.'
@@ -209,10 +191,7 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
       }
 
       try {
-        console.log('[UPLOAD] Uploading PDF to Supabase Storage...');
         const { path: storagePath, size } = await uploadPdfToSupabase(req.file.buffer, req.file.originalname);
-
-        console.log('[UPLOAD] Supabase upload success:', storagePath);
         return res.json({
           url: storagePath,
           publicId: storagePath,
@@ -221,11 +200,7 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
           filename: req.file.originalname
         });
       } catch (supabaseErr: any) {
-        console.error('[UPLOAD] Supabase upload error:', {
-          message: supabaseErr.message,
-          name: supabaseErr.name,
-          stack: supabaseErr.stack
-        });
+        console.error('[UPLOAD] Supabase upload error:', supabaseErr.message);
         return res.status(500).json({
           error: 'SUPABASE_UPLOAD_FAILED',
           message: `Supabase upload failed: ${supabaseErr.message}`
