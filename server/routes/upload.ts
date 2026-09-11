@@ -166,18 +166,29 @@ async function uploadToCloudinaryUnsigned(
 // Upload endpoint (Admin only)
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
+    console.log('[UPLOAD] === REQUEST START ===');
     console.log('[UPLOAD] Cloudinary configured:', isCloudinaryConfigured);
     console.log('[UPLOAD] Supabase configured:', isSupabaseConfigured);
+    console.log('[UPLOAD] SUPABASE_URL exists:', Boolean(process.env.SUPABASE_URL));
+    console.log('[UPLOAD] SUPABASE_SECRET_KEY exists:', Boolean(process.env.SUPABASE_SECRET_KEY));
 
     if (!req.file) {
+      console.log('[UPLOAD] ERROR: No file in request');
       return res.status(400).json({ error: 'NO_FILE', message: 'No file was uploaded' });
     }
 
-    console.log('[UPLOAD] File received:', req.file.originalname, req.file.mimetype, req.file.size);
+    console.log('[UPLOAD] File received:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      fieldname: req.file.fieldname
+    });
 
     // Validate file type
     const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
     const isImage = req.file.mimetype.startsWith('image/');
+
+    console.log('[UPLOAD] File type check:', { isPdf, isImage, mimetype: req.file.mimetype });
 
     if (!isPdf && !isImage) {
       console.log('[UPLOAD] Invalid file type:', req.file.mimetype);
@@ -210,7 +221,11 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
           filename: req.file.originalname
         });
       } catch (supabaseErr: any) {
-        console.error('[UPLOAD] Supabase upload error:', supabaseErr.message);
+        console.error('[UPLOAD] Supabase upload error:', {
+          message: supabaseErr.message,
+          name: supabaseErr.name,
+          stack: supabaseErr.stack
+        });
         return res.status(500).json({
           error: 'SUPABASE_UPLOAD_FAILED',
           message: `Supabase upload failed: ${supabaseErr.message}`

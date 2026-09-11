@@ -34,6 +34,13 @@ async function uploadPdfToSupabase(buffer: Buffer, filename: string): Promise<{ 
 
   const storagePath = generateStoragePath(filename);
 
+  console.log('[SUPABASE] Upload attempt:', {
+    bucket: EBOOKS_BUCKET,
+    storagePath,
+    fileSize: buffer.length,
+    contentType: 'application/pdf'
+  });
+
   const { data, error } = await supabase.storage
     .from(EBOOKS_BUCKET)
     .upload(storagePath, buffer, {
@@ -42,9 +49,18 @@ async function uploadPdfToSupabase(buffer: Buffer, filename: string): Promise<{ 
     });
 
   if (error) {
+    console.error('[SUPABASE] Upload error details:', {
+      message: error.message,
+      statusCode: error.statusCode,
+      error: error.error,
+      name: error.name,
+      bucket: EBOOKS_BUCKET,
+      storagePath
+    });
     throw new Error(`Supabase upload failed: ${error.message}`);
   }
 
+  console.log('[SUPABASE] Upload success:', { path: data.path, size: buffer.length });
   return { path: data.path, size: buffer.length };
 }
 
