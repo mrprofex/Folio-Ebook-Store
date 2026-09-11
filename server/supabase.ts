@@ -17,7 +17,7 @@ if (isSupabaseConfigured) {
   });
 }
 
-const EBOOKS_BUCKET = 'ebooks';
+const EBOOKS_BUCKET = 'folio-pdf-storage';
 
 function generateStoragePath(filename: string): string {
   const timestamp = Date.now();
