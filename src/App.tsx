@@ -38,6 +38,7 @@ function MainApp() {
   const [selectedEbookSlug, setSelectedEbookSlug] = useState<string | null>(null);
   const [purchaseSuccessId, setPurchaseSuccessId] = useState<string | null>(null);
   const [ownedEbookIds, setOwnedEbookIds] = useState<Set<string>>(new Set());
+  const [adminEbooks, setAdminEbooks] = useState<Ebook[]>([]);
 
   // Admin Modal state
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -240,11 +241,13 @@ function MainApp() {
         adminChild = (
           <AdminEbooksPage
             key={adminRefreshKey}
-            onOpenNewEbook={() => {
+            onOpenNewEbook={(ebooks) => {
+              setAdminEbooks(ebooks);
               setEditingEbook(null);
               setIsAdminModalOpen(true);
             }}
-            onEditEbook={(ebook) => {
+            onEditEbook={(ebook, ebooks) => {
+              setAdminEbooks(ebooks);
               setEditingEbook(ebook);
               setIsAdminModalOpen(true);
             }}
@@ -331,6 +334,7 @@ function MainApp() {
           fetchOwnedEbooks();
         }}
         initialData={editingEbook}
+        allEbooks={adminEbooks}
       />
     </div>
   );

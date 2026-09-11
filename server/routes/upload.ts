@@ -166,6 +166,15 @@ async function uploadToCloudinaryUnsigned(
 // Upload endpoint (Admin only)
 router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
   try {
+    console.log('[UPLOAD] Request received:', {
+      hasFile: !!req.file,
+      fileName: req.file?.originalname,
+      mimeType: req.file?.mimetype,
+      fileSize: req.file?.size,
+      supabaseConfigured: isSupabaseConfigured,
+      cloudinaryConfigured: isCloudinaryConfigured
+    });
+
     if (!req.file) {
       return res.status(400).json({ error: 'NO_FILE', message: 'No file was uploaded' });
     }

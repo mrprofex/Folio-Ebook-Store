@@ -52,6 +52,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
   // Categories dynamic list
   const [categories, setCategories] = useState<Category[]>([]);
   const [catalogList, setCatalogList] = useState<Ebook[]>(providedCatalog);
+  const [categoriesFetched, setCategoriesFetched] = useState(false);
 
   // Publication Type
   const [publicationType, setPublicationType] = useState<PublicationType>('SINGLE');
@@ -104,18 +105,27 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Fetch categories
-    apiRequest<{ categories: Category[] }>('/api/admin/categories')
-      .then(res => {
-        if (res.categories && res.categories.length > 0) {
-          setCategories(res.categories);
-        }
-      })
-      .catch(() => {
-        // Fallback to public categories
-        apiRequest<{ categories: string[] }>('/api/ebooks/categories')
-          .then(res => {
-            if (res.categories) {
+    let cancelled = false;
+
+    // Use provided catalog immediately (no fetch needed)
+    if (providedCatalog.length > 0) {
+      setCatalogList(providedCatalog);
+    }
+
+    // Fetch categories only once
+    if (!categoriesFetched) {
+      const fetchCategories = async () => {
+        try {
+          const res = await apiRequest<{ categories: Category[] }>('/api/admin/categories');
+          if (!cancelled && res.categories && res.categories.length > 0) {
+            setCategories(res.categories);
+            setCategoriesFetched(true);
+          }
+        } catch {
+          // Fallback to public categories only if admin categories fail
+          try {
+            const res = await apiRequest<{ categories: string[] }>('/api/ebooks/categories');
+            if (!cancelled && res.categories) {
               setCategories(res.categories.map((c, i) => ({
                 id: `cat-${i}`,
                 name: c,
@@ -124,19 +134,25 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               })));
+              setCategoriesFetched(true);
             }
-          })
-          .catch(() => {});
-      });
+          } catch {
+            // Silent fail - categories remain empty
+          }
+        }
+      };
 
-    // Fetch catalog list if empty
-    if (providedCatalog.length === 0) {
-      apiRequest<{ ebooks: Ebook[] }>('/api/admin/ebooks')
-        .then(res => {
-          if (res.ebooks) setCatalogList(res.ebooks);
-        })
-        .catch(() => {});
-    } else {
+      fetchCategories();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, providedCatalog, categoriesFetched]);
+
+  // Update catalog list when providedCatalog changes (while modal is open)
+  useEffect(() => {
+    if (isOpen && providedCatalog.length > 0) {
       setCatalogList(providedCatalog);
     }
   }, [isOpen, providedCatalog]);

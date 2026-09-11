@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 
 interface AdminEbooksPageProps {
-  onOpenNewEbook: () => void;
-  onEditEbook: (ebook: Ebook) => void;
+  onOpenNewEbook: (ebooks: Ebook[]) => void;
+  onEditEbook: (ebook: Ebook, ebooks: Ebook[]) => void;
 }
 
 export const AdminEbooksPage: React.FC<AdminEbooksPageProps> = ({
@@ -106,7 +106,7 @@ export const AdminEbooksPage: React.FC<AdminEbooksPageProps> = ({
 
         <button
           id="btn-admin-add-ebook-page"
-          onClick={onOpenNewEbook}
+          onClick={() => onOpenNewEbook(ebooks)}
           className="px-4 py-2.5 bg-[#8B2635] hover:bg-[#731E2A] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add New Title
@@ -301,7 +301,7 @@ export const AdminEbooksPage: React.FC<AdminEbooksPageProps> = ({
                         {/* Edit */}
                         <button
                           title="Edit publication"
-                          onClick={() => onEditEbook(ebook)}
+                          onClick={() => onEditEbook(ebook, ebooks)}
                           className="p-1.5 text-[#8C8276] hover:text-[#1A1817] hover:bg-[#F0EBE1] rounded transition-colors cursor-pointer"
                         >
                           <Edit className="w-4 h-4" />
