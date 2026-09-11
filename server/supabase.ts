@@ -52,7 +52,6 @@ async function uploadPdfToSupabase(buffer: Buffer, filename: string): Promise<{ 
     console.error('[SUPABASE] Upload error details:', {
       message: error.message,
       statusCode: error.statusCode,
-      error: error.error,
       name: error.name,
       bucket: EBOOKS_BUCKET,
       storagePath
