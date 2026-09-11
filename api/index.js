@@ -24132,13 +24132,32 @@ async function uploadPdfToSupabase(buffer, filename) {
     throw new Error("Supabase not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.");
   }
   const storagePath = generateStoragePath(filename);
+  console.log("[UPLOAD] Supabase upload attempt:", {
+    bucket: EBOOKS_BUCKET,
+    storagePath,
+    fileSize: buffer.length,
+    contentType: "application/pdf",
+    filename
+  });
   const { data, error } = await supabase.storage.from(EBOOKS_BUCKET).upload(storagePath, buffer, {
     contentType: "application/pdf",
     upsert: false
   });
   if (error) {
+    console.error("[UPLOAD] Supabase upload failed:", {
+      message: error.message,
+      statusCode: error.statusCode,
+      bucket: EBOOKS_BUCKET,
+      storagePath,
+      fileSize: buffer.length
+    });
     throw new Error(`Supabase upload failed: ${error.message}`);
   }
+  console.log("[UPLOAD] Supabase upload success:", {
+    bucket: EBOOKS_BUCKET,
+    storagePath: data.path,
+    fileSize: buffer.length
+  });
   return { path: data.path, size: buffer.length };
 }
 async function deletePdfFromSupabase(storagePath) {
@@ -24168,6 +24187,20 @@ async function fetchPdfFromSupabase(signedUrl) {
     throw new Error(`Supabase PDF fetch failed with status ${response.status}`);
   }
   return response;
+}
+async function createSignedUploadUrl(storagePath) {
+  if (!supabase) {
+    throw new Error("Supabase not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.");
+  }
+  const { data, error } = await supabase.storage.from(EBOOKS_BUCKET).createSignedUploadUrl(storagePath);
+  if (error || !data) {
+    throw new Error(`Failed to create signed upload URL: ${error?.message || "Unknown error"}`);
+  }
+  return {
+    path: data.path,
+    token: data.token,
+    signedUrl: data.signedUrl
+  };
 }
 
 // server/routes/download.ts
@@ -24818,6 +24851,7 @@ router6.post("/ebooks", async (req, res) => {
             author: (raw.author || author || "Editorial Staff").trim(),
             category: (raw.category || category || "Technology & Engineering").trim(),
             price: raw.price !== void 0 ? Number(raw.price) : 399,
+            originalPrice: raw.price !== void 0 ? Number(raw.price) : 399,
             currency: currency || "INR",
             publicationType: "SINGLE",
             coverImageUrl: raw.coverImageUrl || coverImageUrl || "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80",
@@ -24900,6 +24934,7 @@ router6.post("/ebooks", async (req, res) => {
             author: (raw.author || author || "Editorial Staff").trim(),
             category: (raw.category || category || "General").trim(),
             price: raw.price !== void 0 ? Number(raw.price) : 299,
+            originalPrice: raw.price !== void 0 ? Number(raw.price) : 299,
             currency: currency || "INR",
             publicationType: "SINGLE",
             coverImageUrl: raw.coverImageUrl || coverImageUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80",
@@ -24935,6 +24970,7 @@ router6.post("/ebooks", async (req, res) => {
       author: (author || "Editorial Staff").trim(),
       category: (category || "General").trim(),
       price: numPrice,
+      originalPrice: numPrice,
       currency: currency || "INR",
       publicationType: cleanPublicationType,
       totalOriginalValue: totalOriginalValue ? Number(totalOriginalValue) : void 0,
@@ -24992,6 +25028,9 @@ router6.put("/ebooks/:id", async (req, res) => {
     const updates = { ...req.body };
     if (updates.price !== void 0) {
       updates.price = Number(updates.price);
+    }
+    if (updates.originalPrice !== void 0) {
+      updates.originalPrice = Number(updates.originalPrice);
     }
     if (updates.totalOriginalValue !== void 0) {
       updates.totalOriginalValue = Number(updates.totalOriginalValue);
@@ -25059,6 +25098,7 @@ router6.put("/ebooks/:id", async (req, res) => {
               category: (raw.category || existingCustom.category || updates.category || existing.category || "General").trim(),
               description: (raw.description || existingCustom.description).trim(),
               price: raw.price !== void 0 ? Number(raw.price) : existingCustom.price,
+              originalPrice: raw.price !== void 0 ? Number(raw.price) : existingCustom.originalPrice,
               coverImageUrl: raw.coverImageUrl || existingCustom.coverImageUrl,
               pdfUrl: raw.pdfUrl || existingCustom.pdfUrl,
               pageCount: raw.pageCount ? Number(raw.pageCount) : existingCustom.pageCount,
@@ -25076,6 +25116,7 @@ router6.put("/ebooks/:id", async (req, res) => {
             author: (raw.author || updates.author || existing.author || "Editorial Staff").trim(),
             category: (raw.category || updates.category || existing.category || "Technology & Engineering").trim(),
             price: raw.price !== void 0 ? Number(raw.price) : 399,
+            originalPrice: raw.price !== void 0 ? Number(raw.price) : 399,
             currency: updates.currency || existing.currency || "INR",
             publicationType: "SINGLE",
             coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80",
@@ -25141,6 +25182,7 @@ router6.put("/ebooks/:id", async (req, res) => {
               category: (raw.category || existingBonus.category || updates.category || existing.category || "General").trim(),
               description: (raw.description || existingBonus.description).trim(),
               price: raw.price !== void 0 ? Number(raw.price) : existingBonus.price,
+              originalPrice: raw.price !== void 0 ? Number(raw.price) : existingBonus.originalPrice,
               coverImageUrl: raw.coverImageUrl || existingBonus.coverImageUrl,
               pdfUrl: raw.pdfUrl || existingBonus.pdfUrl,
               pageCount: raw.pageCount ? Number(raw.pageCount) : existingBonus.pageCount,
@@ -25158,6 +25200,7 @@ router6.put("/ebooks/:id", async (req, res) => {
             author: (raw.author || updates.author || existing.author || "Editorial Staff").trim(),
             category: (raw.category || updates.category || existing.category || "General").trim(),
             price: raw.price !== void 0 ? Number(raw.price) : 299,
+            originalPrice: raw.price !== void 0 ? Number(raw.price) : 299,
             currency: updates.currency || existing.currency || "INR",
             publicationType: "SINGLE",
             coverImageUrl: raw.coverImageUrl || updates.coverImageUrl || existing.coverImageUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80",
@@ -25679,16 +25722,20 @@ async function uploadToCloudinaryUnsigned(buffer, options) {
 }
 router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), async (req, res) => {
   try {
-    console.log("[UPLOAD] Cloudinary configured:", isCloudinaryConfigured3);
-    console.log("[UPLOAD] Supabase configured:", isSupabaseConfigured);
+    console.log("[UPLOAD] Request received:", {
+      hasFile: !!req.file,
+      fileName: req.file?.originalname,
+      mimeType: req.file?.mimetype,
+      fileSize: req.file?.size,
+      supabaseConfigured: isSupabaseConfigured,
+      cloudinaryConfigured: isCloudinaryConfigured3
+    });
     if (!req.file) {
       return res.status(400).json({ error: "NO_FILE", message: "No file was uploaded" });
     }
-    console.log("[UPLOAD] File received:", req.file.originalname, req.file.mimetype, req.file.size);
     const isPdf = req.file.mimetype === "application/pdf" || req.file.originalname.toLowerCase().endsWith(".pdf");
     const isImage = req.file.mimetype.startsWith("image/");
     if (!isPdf && !isImage) {
-      console.log("[UPLOAD] Invalid file type:", req.file.mimetype);
       return res.status(400).json({
         error: "INVALID_FILE_TYPE",
         message: "Only PDF documents and images are allowed."
@@ -25696,16 +25743,13 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
     }
     if (isPdf) {
       if (!isSupabaseConfigured) {
-        console.log("[UPLOAD] Supabase not configured for PDF upload");
         return res.status(500).json({
           error: "SUPABASE_NOT_CONFIGURED",
           message: "Supabase is required for PDF uploads. Please configure SUPABASE_URL and SUPABASE_SECRET_KEY."
         });
       }
       try {
-        console.log("[UPLOAD] Uploading PDF to Supabase Storage...");
         const { path: storagePath, size } = await uploadPdfToSupabase(req.file.buffer, req.file.originalname);
-        console.log("[UPLOAD] Supabase upload success:", storagePath);
         return res.json({
           url: storagePath,
           publicId: storagePath,
@@ -25772,6 +25816,72 @@ router7.post("/file", authMiddleware, adminMiddleware, upload.single("file"), as
   } catch (err) {
     console.error("[UPLOAD] File upload error:", err.message);
     return res.status(500).json({ error: "UPLOAD_FAILED", message: err.message || "File upload failed" });
+  }
+});
+var MAX_PDF_FILE_SIZE = 50 * 1024 * 1024;
+router7.post("/signed-url", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { filename, contentType, size } = req.body;
+    if (!filename || typeof filename !== "string") {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: "Filename is required" });
+    }
+    if (!contentType || typeof contentType !== "string") {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: "Content type is required" });
+    }
+    const isPdf = contentType === "application/pdf" || filename.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      return res.status(400).json({
+        error: "INVALID_FILE_TYPE",
+        message: "Only PDF documents are allowed for direct upload."
+      });
+    }
+    if (size !== void 0 && Number(size) <= 0) {
+      return res.status(400).json({
+        error: "INVALID_FILE_SIZE",
+        message: "File size must be greater than zero."
+      });
+    }
+    if (size !== void 0 && Number(size) > MAX_PDF_FILE_SIZE) {
+      return res.status(400).json({
+        error: "FILE_TOO_LARGE",
+        message: `PDF exceeds the maximum allowed size of ${Math.round(MAX_PDF_FILE_SIZE / (1024 * 1024))} MB.`
+      });
+    }
+    if (!isSupabaseConfigured) {
+      return res.status(500).json({
+        error: "SUPABASE_NOT_CONFIGURED",
+        message: "Supabase is required for PDF uploads. Please configure SUPABASE_URL and SUPABASE_SECRET_KEY."
+      });
+    }
+    const storagePath = generateStoragePath(filename);
+    console.log("[UPLOAD] Creating signed upload URL:", {
+      bucket: "ebooks",
+      storagePath,
+      filename,
+      fileSize: size || "unknown",
+      contentType
+    });
+    const result = await createSignedUploadUrl(storagePath);
+    console.log("[UPLOAD] Signed upload URL created:", {
+      bucket: "ebooks",
+      storagePath: result.path,
+      hasToken: !!result.token,
+      hasSignedUrl: !!result.signedUrl
+    });
+    return res.json({
+      path: result.path,
+      token: result.token,
+      signedUrl: result.signedUrl,
+      filename,
+      bucket: "ebooks",
+      maxFileSize: MAX_PDF_FILE_SIZE
+    });
+  } catch (err) {
+    console.error("[UPLOAD] Signed URL error:", err.message);
+    return res.status(500).json({
+      error: "SIGNED_URL_FAILED",
+      message: err.message || "Failed to create signed upload URL"
+    });
   }
 });
 router7.get("/diagnostic", authMiddleware, adminMiddleware, async (req, res) => {

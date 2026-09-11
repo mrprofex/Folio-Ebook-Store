@@ -40,6 +40,7 @@ export interface ComboItem {
   fileSize?: string;
   coverImageUrl?: string;
   pdfUrl?: string;
+  pdfPublicId?: string;
   pdfFileName?: string;
   ebookId?: string; // If linked to an existing catalog ebook
   sampleChapter?: string;
@@ -55,6 +56,7 @@ export interface BonusItem {
   price?: number;
   coverImageUrl?: string;
   pdfUrl?: string;
+  pdfPublicId?: string;
   pdfFileName?: string;
   pageCount?: number;
   fileSize?: string;

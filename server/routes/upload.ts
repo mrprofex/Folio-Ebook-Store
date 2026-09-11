@@ -9,6 +9,8 @@ import {
   isSupabaseConfigured,
   uploadPdfToSupabase,
   deletePdfFromSupabase,
+  createSignedUploadUrl,
+  generateStoragePath,
   supabase
 } from '../supabase.js';
 
@@ -277,6 +279,93 @@ router.post('/file', authMiddleware, adminMiddleware, upload.single('file'), asy
   } catch (err: any) {
     console.error('[UPLOAD] File upload error:', err.message);
     return res.status(500).json({ error: 'UPLOAD_FAILED', message: err.message || 'File upload failed' });
+  }
+});
+
+// --- Direct-to-Supabase signed upload URL endpoint (Admin only) ---
+// This endpoint does NOT receive file bytes — it returns a signed URL
+// that the browser uploads to directly, bypassing Vercel's 4.5 MB body limit.
+const MAX_PDF_FILE_SIZE = 50 * 1024 * 1024; // 50 MB — Supabase Storage max per operation
+
+router.post('/signed-url', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { filename, contentType, size } = req.body;
+
+    if (!filename || typeof filename !== 'string') {
+      return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Filename is required' });
+    }
+
+    if (!contentType || typeof contentType !== 'string') {
+      return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Content type is required' });
+    }
+
+    // Validate file type — must be PDF
+    const isPdf = contentType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      return res.status(400).json({
+        error: 'INVALID_FILE_TYPE',
+        message: 'Only PDF documents are allowed for direct upload.'
+      });
+    }
+
+    // Reject zero-byte files
+    if (size !== undefined && Number(size) <= 0) {
+      return res.status(400).json({
+        error: 'INVALID_FILE_SIZE',
+        message: 'File size must be greater than zero.'
+      });
+    }
+
+    // Reject files exceeding max size
+    if (size !== undefined && Number(size) > MAX_PDF_FILE_SIZE) {
+      return res.status(400).json({
+        error: 'FILE_TOO_LARGE',
+        message: `PDF exceeds the maximum allowed size of ${Math.round(MAX_PDF_FILE_SIZE / (1024 * 1024))} MB.`
+      });
+    }
+
+    if (!isSupabaseConfigured) {
+      return res.status(500).json({
+        error: 'SUPABASE_NOT_CONFIGURED',
+        message: 'Supabase is required for PDF uploads. Please configure SUPABASE_URL and SUPABASE_SECRET_KEY.'
+      });
+    }
+
+    // Generate a unique storage path within the ebooks bucket
+    const storagePath = generateStoragePath(filename);
+
+    console.log('[UPLOAD] Creating signed upload URL:', {
+      bucket: 'ebooks',
+      storagePath,
+      filename,
+      fileSize: size || 'unknown',
+      contentType
+    });
+
+    const result = await createSignedUploadUrl(storagePath);
+
+    console.log('[UPLOAD] Signed upload URL created:', {
+      bucket: 'ebooks',
+      storagePath: result.path,
+      hasToken: !!result.token,
+      hasSignedUrl: !!result.signedUrl
+    });
+
+    // Return path, token, and the full signedUrl — all non-secret
+    return res.json({
+      path: result.path,
+      token: result.token,
+      signedUrl: result.signedUrl,
+      filename: filename,
+      bucket: 'ebooks',
+      maxFileSize: MAX_PDF_FILE_SIZE
+    });
+  } catch (err: any) {
+    console.error('[UPLOAD] Signed URL error:', err.message);
+    return res.status(500).json({
+      error: 'SIGNED_URL_FAILED',
+      message: err.message || 'Failed to create signed upload URL'
+    });
   }
 });
 

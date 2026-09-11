@@ -105,3 +105,54 @@ export async function uploadFile(file: File): Promise<{ url: string; publicId?: 
     body: formData
   });
 }
+
+export interface SignedUploadUrlResponse {
+  path: string;
+  token: string;
+  signedUrl: string;
+  filename: string;
+  bucket: string;
+  maxFileSize: number;
+}
+
+export async function getSignedUploadUrl(
+  filename: string,
+  contentType: string,
+  size: number
+): Promise<SignedUploadUrlResponse> {
+  return apiRequest<SignedUploadUrlResponse>('/api/upload/signed-url', {
+    method: 'POST',
+    body: JSON.stringify({ filename, contentType, size }),
+  });
+}
+
+export async function uploadPdfDirect(
+  file: File,
+  signedUrl: string,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Match the SDK's uploadToSignedUrl behavior: wrap File (Blob) in FormData
+    const formData = new FormData();
+    formData.append('cacheControl', '3600');
+    formData.append('', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', signedUrl, true);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Direct upload failed with status ${xhr.status}: ${xhr.responseText || xhr.statusText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Direct upload failed: Network error'));
+    xhr.upload.onerror = () => reject(new Error('Direct upload failed: Network error'));
+    xhr.send(formData);
+  });
+}

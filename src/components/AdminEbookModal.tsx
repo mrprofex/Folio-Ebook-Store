@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Ebook, PublicationType, ComboItem, BonusItem, Category } from '../types';
-import { apiRequest, uploadFile } from '../lib/api';
+import { apiRequest, uploadFile, getSignedUploadUrl, uploadPdfDirect, SignedUploadUrlResponse } from '../lib/api';
+import { supabaseBrowser } from '../lib/supabaseBrowser';
 import {
   X,
   Upload,
@@ -99,9 +100,10 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [uploadingItemIndex, setUploadingItemIndex] = useState<{ type: 'combo' | 'bonus'; index: number; target: 'cover' | 'pdf' } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch dynamic categories and catalog ebooks when modal opens
+  // Fetch dynamic categories when modal opens — only once per open lifecycle
   useEffect(() => {
     if (!isOpen) return;
 
@@ -112,8 +114,8 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setCatalogList(providedCatalog);
     }
 
-    // Fetch categories only once
-    if (!categoriesFetched) {
+    // Fetch categories only once per modal open
+    if (!categoriesFetched && providedCatalog.length > 0) {
       const fetchCategories = async () => {
         try {
           const res = await apiRequest<{ categories: Category[] }>('/api/admin/categories');
@@ -150,10 +152,15 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
     };
   }, [isOpen, providedCatalog, categoriesFetched]);
 
-  // Update catalog list when providedCatalog changes (while modal is open)
+  // Update catalog list when providedCatalog changes — uses reference guard to prevent loop
   useEffect(() => {
     if (isOpen && providedCatalog.length > 0) {
-      setCatalogList(providedCatalog);
+      setCatalogList(prev => {
+        if (prev.length === providedCatalog.length && prev.every((e, i) => e.id === providedCatalog[i]?.id)) {
+          return prev;
+        }
+        return providedCatalog;
+      });
     }
   }, [isOpen, providedCatalog]);
 
@@ -346,17 +353,43 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
       setError('Please select a valid PDF document (*.pdf)');
       return;
     }
+    if (file.size === 0) {
+      setError('The selected PDF file is empty. Please choose a different file.');
+      return;
+    }
     setUploadingPdf(true);
     setError(null);
     try {
-      const res = await uploadFile(file);
-      setPdfUrl(res.url);
-      setPdfPublicId(res.publicId || '');
-      setFileSize(res.fileSize);
+      // 1. Request a signed upload URL from the backend (no file bytes sent through Vercel)
+      const signed = await getSignedUploadUrl(file.name, file.type || 'application/pdf', file.size);
+
+      // 2. Upload PDF directly to Supabase Storage via the signed URL
+      if (supabaseBrowser) {
+        // Use the browser Supabase SDK's uploadToSignedUrl
+        const { error: uploadError } = await supabaseBrowser.storage
+          .from('ebooks')
+          .uploadToSignedUrl(signed.path, signed.token, file, {
+            contentType: file.type || 'application/pdf',
+          });
+        if (uploadError) {
+          throw new Error(`Supabase upload failed: ${uploadError.message}`);
+        }
+      } else {
+        // Fallback: PUT directly to the signed URL via fetch
+        await uploadPdfDirect(file, signed.signedUrl, (progress) => {
+          setUploadProgress(progress);
+        });
+      }
+
+      // 3. Store the Supabase storage path as pdfUrl (pdfPublicId = path for deletion)
+      setPdfUrl(signed.path);
+      setPdfPublicId(signed.path);
+      setFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
     } catch (err: any) {
-      setError(err.message || 'Failed to upload PDF file to Cloudinary');
+      setError(err.message || 'Failed to upload PDF file');
     } finally {
       setUploadingPdf(false);
+      setUploadProgress(0);
     }
   };
 
@@ -367,40 +400,82 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
     target: 'cover' | 'pdf',
     file: File
   ) => {
-    if (target === 'pdf' && !file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      setError('Please select a valid PDF file (*.pdf)');
-      return;
+    if (target === 'pdf') {
+      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+        setError('Please select a valid PDF file (*.pdf)');
+        return;
+      }
+      if (file.size === 0) {
+        setError('The selected PDF file is empty. Please choose a different file.');
+        return;
+      }
     }
 
     setUploadingItemIndex({ type, index, target });
     setError(null);
     try {
-      const res = await uploadFile(file);
+      let url: string;
+      let publicId: string | undefined;
+      let fileSizeStr: string;
+
+      if (target === 'pdf') {
+        // Direct-to-Supabase signed URL upload (bypasses Vercel body limit)
+        const signed = await getSignedUploadUrl(file.name, file.type || 'application/pdf', file.size);
+
+        if (supabaseBrowser) {
+          const { error: uploadError } = await supabaseBrowser.storage
+            .from('ebooks')
+            .uploadToSignedUrl(signed.path, signed.token, file, {
+              contentType: file.type || 'application/pdf',
+            });
+          if (uploadError) {
+            throw new Error(`Supabase upload failed: ${uploadError.message}`);
+          }
+        } else {
+          await uploadPdfDirect(file, signed.signedUrl, (progress) => {
+            setUploadProgress(progress);
+          });
+        }
+
+        url = signed.path;
+        publicId = signed.path;
+        fileSizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      } else {
+        // Cover image upload — keep using existing Cloudinary flow
+        const res = await uploadFile(file);
+        url = res.url;
+        publicId = res.publicId;
+        fileSizeStr = res.fileSize;
+      }
+
       if (type === 'combo') {
         const updated = [...comboItems];
         if (target === 'cover') {
-          updated[index].coverImageUrl = res.url;
+          updated[index].coverImageUrl = url;
         } else {
-          updated[index].pdfUrl = res.url;
-          updated[index].fileSize = res.fileSize;
-          updated[index].pdfFileName = res.filename || file.name;
+          updated[index].pdfUrl = url;
+          updated[index].pdfPublicId = publicId || undefined;
+          updated[index].fileSize = fileSizeStr;
+          updated[index].pdfFileName = file.name;
         }
         setComboItems(updated);
       } else {
         const updated = [...bonusItems];
         if (target === 'cover') {
-          updated[index].coverImageUrl = res.url;
+          updated[index].coverImageUrl = url;
         } else {
-          updated[index].pdfUrl = res.url;
-          updated[index].fileSize = res.fileSize;
-          updated[index].pdfFileName = res.filename || file.name;
+          updated[index].pdfUrl = url;
+          updated[index].pdfPublicId = publicId || undefined;
+          updated[index].fileSize = fileSizeStr;
+          updated[index].pdfFileName = file.name;
         }
         setBonusItems(updated);
       }
     } catch (err: any) {
-      setError(err.message || `Failed to upload ${target} to Cloudinary`);
+      setError(err.message || `Failed to upload ${target}`);
     } finally {
       setUploadingItemIndex(null);
+      setUploadProgress(0);
     }
   };
 
@@ -1571,7 +1646,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
                               {uploadingItemIndex?.type === 'combo' && uploadingItemIndex?.index === idx && uploadingItemIndex?.target === 'pdf' ? (
                                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-center gap-2 text-xs text-indigo-900 font-medium">
                                   <span className="inline-block w-4 h-4 border-2 border-indigo-700 border-t-transparent rounded-full animate-spin"></span>
-                                  Uploading PDF to Cloudinary...
+                                  Uploading PDF...
                                 </div>
                               ) : item.pdfUrl ? (
                                 <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">
@@ -1973,7 +2048,7 @@ export const AdminEbookModal: React.FC<AdminEbookModalProps> = ({
                                 {uploadingItemIndex?.type === 'bonus' && uploadingItemIndex?.index === idx && uploadingItemIndex?.target === 'pdf' ? (
                                   <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-center justify-center gap-2 text-xs text-purple-900 font-medium">
                                     <span className="inline-block w-4 h-4 border-2 border-purple-700 border-t-transparent rounded-full animate-spin"></span>
-                                    Uploading PDF to Cloudinary...
+                                    Uploading PDF...
                                   </div>
                                 ) : bItem.pdfUrl ? (
                                   <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">

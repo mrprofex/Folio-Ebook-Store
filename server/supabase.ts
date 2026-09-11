@@ -109,12 +109,34 @@ async function fetchPdfFromSupabase(signedUrl: string): Promise<Response> {
   return response;
 }
 
+async function createSignedUploadUrl(storagePath: string): Promise<{ path: string; token: string; signedUrl: string }> {
+  if (!supabase) {
+    throw new Error('Supabase not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.');
+  }
+
+  const { data, error } = await supabase.storage
+    .from(EBOOKS_BUCKET)
+    .createSignedUploadUrl(storagePath);
+
+  if (error || !data) {
+    throw new Error(`Failed to create signed upload URL: ${error?.message || 'Unknown error'}`);
+  }
+
+  return {
+    path: data.path,
+    token: data.token,
+    signedUrl: data.signedUrl
+  };
+}
+
 export {
   supabase,
   isSupabaseConfigured,
   EBOOKS_BUCKET,
+  generateStoragePath,
   uploadPdfToSupabase,
   deletePdfFromSupabase,
   createSignedDownloadUrl,
-  fetchPdfFromSupabase
+  fetchPdfFromSupabase,
+  createSignedUploadUrl
 };
