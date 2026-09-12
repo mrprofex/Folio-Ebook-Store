@@ -141,7 +141,7 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('folio_auth_token');
+      const token = localStorage.getItem('ebook_store_auth_token');
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -187,7 +187,7 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     try {
-      const token = localStorage.getItem('folio_auth_token');
+      const token = localStorage.getItem('ebook_store_auth_token');
       const res = await fetch(`/api/admin/coupons/${id}/toggle-active`, {
         method: 'PATCH',
         headers: {
@@ -210,7 +210,7 @@ export const AdminCouponsPage: React.FC<AdminCouponsPageProps> = ({ onNavigateTo
     }
 
     try {
-      const token = localStorage.getItem('folio_auth_token');
+      const token = localStorage.getItem('ebook_store_auth_token');
       const res = await fetch(`/api/admin/coupons/${coupon.id}`, {
         method: 'DELETE',
         headers: {

@@ -15710,7 +15710,7 @@ var getRazorpayInstance = () => {
   }
   return null;
 };
-router3.post("/validate-coupon", async (req, res) => {
+router3.post("/validate-coupon", optionalAuthMiddleware, async (req, res) => {
   try {
     const { code, ebookId } = req.body;
     const userId = req.user?.id;
@@ -24766,6 +24766,7 @@ router6.post("/ebooks", async (req, res) => {
       author,
       category,
       price,
+      originalPrice,
       currency,
       publicationType,
       totalOriginalValue,
@@ -24970,7 +24971,7 @@ router6.post("/ebooks", async (req, res) => {
       author: (author || "Editorial Staff").trim(),
       category: (category || "General").trim(),
       price: numPrice,
-      originalPrice: numPrice,
+      originalPrice: Number(originalPrice),
       currency: currency || "INR",
       publicationType: cleanPublicationType,
       totalOriginalValue: totalOriginalValue ? Number(totalOriginalValue) : void 0,

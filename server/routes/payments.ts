@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { db } from '../db.js';
-import { authMiddleware, AuthRequest } from '../auth.js';
+import { authMiddleware, optionalAuthMiddleware, AuthRequest } from '../auth.js';
 
 const router = Router();
 
@@ -22,7 +22,7 @@ const getRazorpayInstance = () => {
 };
 
 // 1. Validate Coupon Code Endpoint (Server-Side)
-router.post('/validate-coupon', async (req: AuthRequest, res: Response) => {
+router.post('/validate-coupon', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { code, ebookId } = req.body;
     const userId = req.user?.id; // Optional: user may or may not be logged in when previewing
