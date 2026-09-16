@@ -53,6 +53,8 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
   const [downloadingComboItem, setDownloadingComboItem] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'volumes' | 'sample'>('overview');
+  
+  
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -271,7 +273,7 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
       });
 
       // 3. Handle Razorpay Checkout
-      if (typeof window !== 'undefined' && window.Razorpay) {
+      if (window.Razorpay) {
         const options = {
           key: orderData.keyId,
           amount: orderData.amount,
