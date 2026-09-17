@@ -14945,39 +14945,22 @@ var Database = class {
       (await pool.query("SELECT COALESCE(SUM(discount_amount), 0)::numeric(12,2) AS total FROM purchases WHERE payment_status = 'SUCCESS'")).rows[0].total
     );
     const recentRes = await pool.query(
-      "SELECT p.*, u.name as user_name, u.email as user_email, e.title as ebook_title, e.slug as ebook_slug, e.cover_image_url as ebook_cover FROM purchases p LEFT JOIN users u ON u.id = p.user_id LEFT JOIN ebooks e ON e.id = p.ebook_id WHERE p.payment_status = 'SUCCESS' ORDER BY p.purchased_at DESC LIMIT 10"
+      "SELECT p.*, u.name as user_name, u.email as user_email FROM purchases p LEFT JOIN users u ON u.id = p.user_id WHERE p.payment_status = 'SUCCESS' ORDER BY p.purchased_at DESC LIMIT 10"
     );
+    const ebookIds = /* @__PURE__ */ new Set();
+    const userIds = /* @__PURE__ */ new Set();
+    const recentRows = recentRes.rows;
+    for (const r of recentRows) {
+      ebookIds.add(r.ebook_id);
+      userIds.add(r.user_id);
+    }
+    const ebookMap = await this.loadEbookMapByIds(ebookIds);
+    const userMap = await this.loadUserMapByIds(userIds);
     const recentPurchases = await Promise.all(
-      recentRes.rows.map(async (r) => {
+      recentRows.map(async (r) => {
         const purchase = mapPurchase(r);
-        const ebook = r.ebook_title ? {
-          id: r.ebook_id,
-          title: r.ebook_title,
-          slug: r.ebook_slug,
-          description: "",
-          author: "",
-          category: "",
-          price: 0,
-          currency: "INR",
-          coverImageUrl: r.ebook_cover,
-          pdfUrl: "",
-          fileSize: "",
-          pageCount: 0,
-          featured: false,
-          published: false,
-          downloadCount: 0,
-          createdAt: "",
-          updatedAt: ""
-        } : void 0;
-        const user = r.user_name ? {
-          id: r.user_id,
-          name: r.user_name,
-          email: r.user_email,
-          role: "USER",
-          createdAt: "",
-          updatedAt: "",
-          isActive: true
-        } : void 0;
+        const ebook = ebookMap.get(r.ebook_id);
+        const user = userMap.get(r.user_id);
         return this.enrichPurchase(purchase, ebook ? /* @__PURE__ */ new Map([[ebook.id, ebook]]) : void 0, user ? /* @__PURE__ */ new Map([[user.id, user]]) : void 0);
       })
     );
@@ -15923,6 +15906,40 @@ router3.post("/verify", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Payment verification error:", err);
     return res.status(500).json({ error: "VERIFICATION_FAILED", message: err.message || "Payment verification failed" });
+  }
+});
+router3.get("/callback", optionalAuthMiddleware, async (req, res) => {
+  try {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.query;
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return res.redirect("/ebooks?payment_callback_error=missing_params");
+    }
+    const purchase = await db.findPurchaseByOrderId(razorpay_order_id);
+    if (!purchase) {
+      return res.redirect("/ebooks?payment_callback_error=order_not_found");
+    }
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return res.redirect("/ebooks?payment_callback_error=config_error");
+    }
+    const generatedSignature = crypto2.createHmac("sha256", keySecret).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest("hex");
+    const isValid = generatedSignature === razorpay_signature;
+    if (!isValid) {
+      await db.markPurchaseFailed(razorpay_order_id);
+      return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_error=invalid_signature`);
+    }
+    const completedPurchase = await db.verifyAndCompletePurchase(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+    if (!completedPurchase) {
+      return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_error=server_error`);
+    }
+    return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_success=true`);
+  } catch (err) {
+    console.error("Error in payment callback:", err);
+    return res.redirect("/ebooks?payment_callback_error=server_error");
   }
 });
 var payments_default = router3;

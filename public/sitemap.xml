@@ -2,55 +2,133 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url>
   <loc>https://folio-ebook.vercel.app/</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>daily</changefreq>
   <priority>1.0</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/ebooks</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>daily</changefreq>
   <priority>0.9</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/about</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.6</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/terms</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.5</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/privacy-policy</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.5</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/refunds</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.5</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/contact</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.5</priority>
 </url>
 <url>
   <loc>https://folio-ebook.vercel.app/delivery</loc>
-  <lastmod>2026-09-11T16:00:57.883Z</lastmod>
+  <lastmod>2026-09-17T08:35:08.239Z</lastmod>
   <changefreq>monthly</changefreq>
   <priority>0.5</priority>
 </url>
 <url>
+  <loc>https://folio-ebook.vercel.app/ebooks/atomic-habits</loc>
+  <lastmod>2026-09-16T18:29:35.658Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/rich-dad-poor-dad</loc>
+  <lastmod>2026-09-12T12:16:57.193Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/the-psychology-of-money</loc>
+  <lastmod>2026-09-12T13:47:43.246Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/iron-flame</loc>
+  <lastmod>2026-09-12T08:45:41.970Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/the-richest-man-in-babylon</loc>
+  <lastmod>2026-09-12T14:17:17.468Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/fifteen-thousand-useful-phrases</loc>
+  <lastmod>2026-09-13T15:13:54.871Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/fourth-wing</loc>
+  <lastmod>2026-09-13T14:19:34.502Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
   <loc>https://folio-ebook.vercel.app/ebooks/the-subtle-art-of-not-giving-a-fck</loc>
-  <lastmod>2026-09-11T04:20:15.064Z</lastmod>
+  <lastmod>2026-09-13T15:05:07.946Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/rich-dad-poor-dad-hindi-edition</loc>
+  <lastmod>2026-09-13T15:13:17.029Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/stories-that-take</loc>
+  <lastmod>2026-09-13T15:19:33.457Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/the-secret</loc>
+  <lastmod>2026-09-13T14:10:08.062Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/what-to-say-when-you-talk-to-yourself</loc>
+  <lastmod>2026-09-13T15:27:20.133Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/the-48-laws-of-power-hindi-edition</loc>
+  <lastmod>2026-09-13T14:19:22.688Z</lastmod>
+  <changefreq>weekly</changefreq>
+  <priority>0.8</priority>
+</url>
+<url>
+  <loc>https://folio-ebook.vercel.app/ebooks/the-millionaire-fastlane</loc>
+  <lastmod>2026-09-13T14:55:32.468Z</lastmod>
   <changefreq>weekly</changefreq>
   <priority>0.8</priority>
 </url>
