@@ -272,24 +272,24 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
         })
       });
 
-// 3. Handle Razorpay Checkout
-       if (window.Razorpay) {
-         const options = {
-           key: orderData.keyId,
-           amount: orderData.amount,
-           currency: orderData.currency,
-           name: 'FOLIO Bookstore',
-           description: `Digital License: ${orderData.ebookTitle}`,
-           image: ebook.coverImageUrl,
-           order_id: orderData.orderId,
-           prefill: {
-             name: orderData.userName,
-             email: orderData.userEmail
-           },
-theme: {
-              color: '#8B2635'
-            },
-            handler: async function (response: any) {
+      // 3. Handle Razorpay Checkout
+      if (window.Razorpay) {
+        const options = {
+          key: orderData.keyId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: 'FOLIO Bookstore',
+          description: `Digital License: ${orderData.ebookTitle}`,
+          image: ebook.coverImageUrl,
+          order_id: orderData.orderId,
+          prefill: {
+            name: orderData.userName,
+            email: orderData.userEmail
+          },
+          theme: {
+            color: '#8B2635'
+},
+           handler: async function (response: any) {
              try {
                // 4. Verify signature on SERVER
                const verifyRes = await apiRequest<{ success: boolean; purchase: Purchase }>(
