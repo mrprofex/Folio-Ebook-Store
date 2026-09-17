@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+﻿import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import {
   User,
@@ -1167,44 +1167,25 @@ async getDashboardStats(): Promise<DashboardStats> {
 
     // Recent purchases (limit 10)
     const recentRes = await pool.query(
-      "SELECT p.*, u.name as user_name, u.email as user_email, e.title as ebook_title, e.slug as ebook_slug, e.cover_image_url as ebook_cover FROM purchases p LEFT JOIN users u ON u.id = p.user_id LEFT JOIN ebooks e ON e.id = p.ebook_id WHERE p.payment_status = 'SUCCESS' ORDER BY p.purchased_at DESC LIMIT 10"
+      "SELECT p.*, u.name as user_name, u.email as user_email FROM purchases p LEFT JOIN users u ON u.id = p.user_id WHERE p.payment_status = 'SUCCESS' ORDER BY p.purchased_at DESC LIMIT 10"
     );
+    const ebookIds = new Set<string>();
+    const userIds = new Set<string>();
+    const recentRows = recentRes.rows;
+    for (const r of recentRows) {
+      ebookIds.add(r.ebook_id);
+      userIds.add(r.user_id);
+    }
+    const ebookMap = await this.loadEbookMapByIds(ebookIds);
+    const userMap = await this.loadUserMapByIds(userIds);
     const recentPurchases: Purchase[] = await Promise.all(
-      recentRes.rows.map(async (r) => {
+      recentRows.map(async (r) => {
         const purchase = mapPurchase(r);
-        const ebook = r.ebook_title ? {
-          id: r.ebook_id,
-          title: r.ebook_title,
-          slug: r.ebook_slug,
-          description: '',
-          author: '',
-          category: '',
-          price: 0,
-          currency: 'INR',
-          coverImageUrl: r.ebook_cover,
-          pdfUrl: '',
-          fileSize: '',
-          pageCount: 0,
-          featured: false,
-          published: false,
-          downloadCount: 0,
-          createdAt: '',
-          updatedAt: ''
-        } : undefined;
-        const user = r.user_name ? {
-          id: r.user_id,
-          name: r.user_name,
-          email: r.user_email,
-          role: 'USER' as const,
-          createdAt: '',
-          updatedAt: '',
-          isActive: true
-        } : undefined;
+        const ebook = ebookMap.get(r.ebook_id);
+        const user = userMap.get(r.user_id);
         return this.enrichPurchase(purchase, ebook ? new Map([[ebook.id, ebook]]) : undefined, user ? new Map([[user.id, user]]) : undefined);
       })
-    );
-
-    // Top selling ebooks using SQL aggregation
+    );// Top selling ebooks using SQL aggregation
     const topRes = await pool.query(
       `SELECT ebook_id, COUNT(*)::int AS sales_count, COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue
        FROM purchases WHERE payment_status = 'SUCCESS' GROUP BY ebook_id ORDER BY sales_count DESC LIMIT 5`
@@ -1522,5 +1503,6 @@ async getDashboardStats(): Promise<DashboardStats> {
 }
 
 export const db = new Database();
+
 
 

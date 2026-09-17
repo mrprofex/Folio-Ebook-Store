@@ -282,4 +282,59 @@ router.post('/verify', authMiddleware, async (req: AuthRequest, res: Response) =
   }
 });
 
+// 4. Handle Razorpay Callback URL Fallback (for cases where handler doesn't fire)
+router.get('/callback', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.query;
+
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      // Redirect to ebook page with error indication
+      // We don't know the ebookId here, so we'll redirect to homepage or show a generic error
+      // For now, let's redirect to ebooks page with a parameter
+      return res.redirect('/ebooks?payment_callback_error=missing_params');
+    }
+
+    // Find purchase by order ID
+    const purchase = await db.findPurchaseByOrderId(razorpay_order_id as string);
+    if (!purchase) {
+      return res.redirect('/ebooks?payment_callback_error=order_not_found');
+    }
+
+    // Verify signature (same logic as in /verify endpoint)
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return res.redirect('/ebooks?payment_callback_error=config_error');
+    }
+
+    const generatedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    const isValid = generatedSignature === razorpay_signature;
+
+    if (!isValid) {
+      await db.markPurchaseFailed(razorpay_order_id as string);
+      return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_error=invalid_signature`);
+    }
+
+    // Mark as successful
+    const completedPurchase = await db.verifyAndCompletePurchase(
+      razorpay_order_id as string,
+      razorpay_payment_id as string,
+      razorpay_signature as string
+    );
+
+    if (!completedPurchase) {
+      return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_error=server_error`);
+    }
+
+    // Redirect to ebook detail page - success will be reflected in DB
+    return res.redirect(`/ebooks/${purchase.ebookId}?payment_callback_success=true`);
+  } catch (err: any) {
+    console.error('Error in payment callback:', err);
+    return res.redirect('/ebooks?payment_callback_error=server_error');
+  }
+});
+
 export default router;

@@ -288,41 +288,65 @@ export const EbookDetailPage: React.FC<EbookDetailPageProps> = ({
           },
           theme: {
             color: '#8B2635'
-          },
-          handler: async function (response: any) {
-            try {
-              // 4. Verify signature on SERVER
-              const verifyRes = await apiRequest<{ success: boolean; purchase: Purchase }>(
-                '/api/payments/verify',
-                {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature,
-                    ebookId: ebook.id
-                  })
-                }
-              );
+},
+           handler: async function (response: any) {
+             try {
+               // 4. Verify signature on SERVER
+               const verifyRes = await apiRequest<{ success: boolean; purchase: Purchase }>(
+                 '/api/payments/verify',
+                 {
+                   method: 'POST',
+                   body: JSON.stringify({
+                     razorpay_order_id: response.razorpay_order_id,
+                     razorpay_payment_id: response.razorpay_payment_id,
+                     razorpay_signature: response.razorpay_signature,
+                     ebookId: ebook.id
+                   })
+                 }
+               );
 
-              setIsPurchased(true);
-              setPurchaseId(verifyRes.purchase.id);
-              onPurchaseSuccess(verifyRes.purchase.id);
-            } catch (vErr: any) {
-              setError(vErr.message || 'Payment signature verification failed.');
-            } finally {
-              setPurchasing(false);
-            }
-          },
-          modal: {
-            ondismiss: function () {
-              setPurchasing(false);
-            }
-          }
-        };
+               setIsPurchased(true);
+               setPurchaseId(verifyRes.purchase.id);
+               onPurchaseSuccess(verifyRes.purchase.id);
+             } catch (vErr: any) {
+               setError(vErr.message || 'Payment signature verification failed.');
+             } finally {
+               setPurchasing(false);
+             }
+           },
+           modal: {
+             ondismiss: function () {
+               setPurchasing(false);
+             }
+           },
+           // Add callback_url as fallback for cases where handler doesn't fire (e.g., modal destroyed during UPI app switch)
+           callback_url: `${window.location.origin}/api/payments/callback`
+         };
 
         const rzp = new window.Razorpay(options);
         rzp.on('payment.failed', function (response: any) {
+          // Log non-sensitive diagnostic information for debugging
+          if (response.error) {
+            console.log('[Razorpay payment.failed]', {
+              timestamp: new Date().toISOString(),
+              code: response.error.code,
+              description: response.error.description,
+              reason: response.error.reason,
+              source: response.error.source,
+              step: response.error.step,
+              metadata: response.error.metadata
+                ? {
+                    razorpay_payment_id: response.error.metadata.razorpay_payment_id,
+                    razorpay_order_id: response.error.metadata.razorpay_order_id
+                  }
+                : undefined,
+              // Additional context for debugging
+              purchasingState: purchasing,
+              isPurchasedState: isPurchased,
+              ebookId: ebook?.id,
+              orderId: orderData?.orderId
+            });
+          }
           setError(response.error?.description || 'Payment was declined or cancelled.');
           setPurchasing(false);
         });
